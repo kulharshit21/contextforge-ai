@@ -17,6 +17,11 @@ const ibmPlexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "ContextForge",
   description: "Local-first AI project memory compiler for coding agents.",
+  icons: {
+    icon: "/contextforge-mark.svg",
+    shortcut: "/contextforge-mark.svg",
+    apple: "/contextforge-mark.svg",
+  },
 };
 
 export default function RootLayout({

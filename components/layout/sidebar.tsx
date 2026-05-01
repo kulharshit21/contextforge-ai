@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { FolderKanban, House, LayoutDashboard, TerminalSquare } from "lucide-react";
+import { FolderKanban, House, LayoutDashboard } from "lucide-react";
 
+import { ContextForgeMark } from "@/components/brand/contextforge-mark";
 import { Badge } from "@/components/ui/badge";
 
 const navItems = [
@@ -15,9 +16,7 @@ export function Sidebar() {
       <div className="flex h-full flex-col gap-8">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
-            <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-3 text-cyan-200">
-              <TerminalSquare className="size-5" />
-            </div>
+            <ContextForgeMark className="size-11" />
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-cyan-200">ContextForge</p>
               <h1 className="text-lg font-semibold text-white">Project Memory</h1>

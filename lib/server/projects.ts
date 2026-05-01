@@ -243,7 +243,7 @@ async function getStoredProjects() {
     await ensureStarterWorkspace();
     return projects;
   } catch (error) {
-    console.error("Failed to load local workspace index.", error);
+    console.warn("Falling back to demo projects because local workspace index failed to load.", error);
     return [];
   }
 }
@@ -291,7 +291,7 @@ export async function listProjects() {
               .at(-1) ?? project.updatedAt,
           };
         } catch (error) {
-          console.error(`Failed to load project card for ${project.id}.`, error);
+          console.warn(`Skipping project ${project.id} because its local snapshot failed to load.`, error);
           return null;
         }
       }),
@@ -345,7 +345,7 @@ export async function getProjectSnapshot(projectId: string) {
       providerWarning: driftAnalysis.provider.warning,
     };
   } catch (error) {
-    console.error(`Failed to load detailed snapshot for ${projectId}.`, error);
+    console.warn(`Falling back to demo snapshot because ${projectId} failed to load.`, error);
     return isDemoMode() ? buildDemoProjectSnapshot(HOSTED_DEMO_WARNING) : null;
   }
 }
@@ -677,7 +677,7 @@ export async function getDashboardStats() {
       recentCapsules: validSnapshots.flatMap((snapshot) => snapshot.capsules).slice(0, 5),
     };
   } catch (error) {
-    console.error("Failed to load dashboard stats.", error);
+    console.warn("Falling back to demo dashboard stats because local data failed to load.", error);
     const demoSnapshot = buildDemoProjectSnapshot(HOSTED_DEMO_WARNING);
     return {
       totalProjects: 1,

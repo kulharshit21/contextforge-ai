@@ -10,10 +10,12 @@ export function isVercel() {
 }
 
 export function isSupabaseConfigured() {
-  return Boolean(
+  const hasSupabase = Boolean(
     getEnvValue("NEXT_PUBLIC_SUPABASE_URL") &&
       getEnvValue("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
   );
+
+  return hasSupabase;
 }
 
 export function getPrivacyMode(): PrivacyMode {
@@ -44,7 +46,9 @@ export function getOllamaBaseUrl() {
 }
 
 export function isDemoMode() {
-  return isVercel() || !isSupabaseConfigured();
+  const hasSupabase = isSupabaseConfigured();
+  const useDemoMode = isVercel() || !hasSupabase;
+  return useDemoMode;
 }
 
 export function canUseLocalWorkspaceFilesystem() {

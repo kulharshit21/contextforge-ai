@@ -9,6 +9,7 @@ import {
   Wallet,
 } from "lucide-react";
 
+import { ContextForgeMark } from "@/components/brand/contextforge-mark";
 import { CodeBlockWithCopy } from "@/components/dashboard/code-block-with-copy";
 import { MarkdownPreview } from "@/components/dashboard/markdown-preview";
 import { PipelineDiagram } from "@/components/dashboard/pipeline-diagram";
@@ -64,7 +65,10 @@ export default function Home() {
         <div className="grid gap-10 xl:grid-cols-[1.05fr_minmax(0,0.95fr)] xl:items-center">
           <div className="space-y-8">
             <div className="space-y-5">
-              <p className="text-sm uppercase tracking-[0.45em] text-cyan-200">ContextForge</p>
+              <div className="flex items-center gap-4">
+                <ContextForgeMark className="size-12" />
+                <p className="text-sm uppercase tracking-[0.45em] text-cyan-200">ContextForge</p>
+              </div>
               <h1 className="max-w-4xl text-5xl font-semibold tracking-tight text-white sm:text-6xl">
                 AI Project Memory Compiler for coding agents
               </h1>
