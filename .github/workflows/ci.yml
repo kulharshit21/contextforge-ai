@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: CLI smoke test
+        shell: bash
+        run: |
+          SMOKE_DIR="$(mktemp -d)"
+          cd "$SMOKE_DIR"
+          printf '{ "name": "contextforge-smoke" }\n' > package.json
+          node "$GITHUB_WORKSPACE/bin/contextforge.js" init
+          node "$GITHUB_WORKSPACE/bin/contextforge.js" scan
+          node "$GITHUB_WORKSPACE/bin/contextforge.js" capsule "Add pharmacy invoice feature"
+          node "$GITHUB_WORKSPACE/bin/contextforge.js" export --all
+          node "$GITHUB_WORKSPACE/bin/contextforge.js" doctor
+          test -f .contextforge/repo-scan.json

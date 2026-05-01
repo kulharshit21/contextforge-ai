@@ -1,0 +1,4 @@
+# Optional extra ContextForge scan ignores
+coverage
+storybook-static
+playwright-report

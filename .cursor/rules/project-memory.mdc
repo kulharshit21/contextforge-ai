@@ -1,0 +1,12 @@
+---
+description: ContextForge project memory
+alwaysApply: true
+---
+
+ContextForge is a local-first AI developer tool.
+
+- Treat `.contextforge/` markdown memory as durable project state.
+- Keep summaries compact and agent-friendly.
+- Record decisions, bugs, failed attempts, and setup facts separately.
+- Avoid cloud AI calls when privacy mode is `local`.
+- Never assume repo scan facts if the scan is stale; rerun `npx contextforge scan`.
