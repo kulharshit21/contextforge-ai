@@ -1,21 +1,32 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { LucideIcon } from "lucide-react";
+import { FileStack, FolderKanban, Sparkles, Wallet } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
+
+const statIcons = {
+  projects: FolderKanban,
+  memory: FileStack,
+  capsules: Sparkles,
+  tokens: Wallet,
+} as const;
+
+export type StatCardIcon = keyof typeof statIcons;
 
 export function StatCard({
   title,
   value,
   helper,
-  icon: Icon,
+  icon,
 }: {
   title: string;
   value: string;
   helper: string;
-  icon: LucideIcon;
+  icon: StatCardIcon;
 }) {
+  const Icon = statIcons[icon];
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}

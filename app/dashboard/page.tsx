@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRightCircle, FileStack, FolderKanban, Radar, Sparkles, Wallet } from "lucide-react";
+import { ArrowRightCircle, Radar } from "lucide-react";
 
 import { StatCard } from "@/components/dashboard/stat-card";
 import { AppShell } from "@/components/layout/app-shell";
@@ -7,11 +7,13 @@ import { ProjectCard } from "@/components/projects/project-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getDashboardStats, getProjectSnapshot } from "@/lib/server/projects";
+import { isVercel } from "@/lib/utils/env";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const stats = await getDashboardStats();
+  const hostedDemo = isVercel();
   const recentProjectIds = stats.recentProjects.map((project) => project.id);
   const snapshots = await Promise.all(
     recentProjectIds.map((projectId) => getProjectSnapshot(projectId)),
@@ -24,30 +26,39 @@ export default async function DashboardPage() {
       description="See memory health, recent capsules, token savings, and quick actions across your local-first AI workspaces."
     >
       <div className="space-y-6">
+        {hostedDemo ? (
+          <Card className="border-cyan-400/20 bg-cyan-400/10">
+            <CardContent className="px-6 py-4 text-sm leading-6 text-cyan-50">
+              This Vercel deployment is running in hosted demo mode. ContextForge uses seeded sample memory here and
+              keeps local workspace writes disabled so the dashboard stays safe in production.
+            </CardContent>
+          </Card>
+        ) : null}
+
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           <StatCard
             title="Projects"
             value={String(stats.totalProjects)}
             helper="Local workspaces plus demo projects"
-            icon={FolderKanban}
+            icon="projects"
           />
           <StatCard
             title="Memory Files"
             value={String(stats.totalMemoryFiles)}
             helper="Structured markdown memory documents"
-            icon={FileStack}
+            icon="memory"
           />
           <StatCard
             title="Capsules"
             value={String(stats.totalCapsules)}
             helper="Generated context capsules"
-            icon={Sparkles}
+            icon="capsules"
           />
           <StatCard
             title="Estimated Tokens Saved"
             value={stats.estimatedTokensSaved.toLocaleString()}
             helper="Approximate reduction from compressed context"
-            icon={Wallet}
+            icon="tokens"
           />
         </div>
 

@@ -5,6 +5,10 @@ function getEnvValue(key: string) {
   return process.env[key]?.trim() ?? "";
 }
 
+export function isVercel() {
+  return getEnvValue("VERCEL") === "1";
+}
+
 export function isSupabaseConfigured() {
   return Boolean(
     getEnvValue("NEXT_PUBLIC_SUPABASE_URL") &&
@@ -40,7 +44,11 @@ export function getOllamaBaseUrl() {
 }
 
 export function isDemoMode() {
-  return !isSupabaseConfigured();
+  return isVercel() || !isSupabaseConfigured();
+}
+
+export function canUseLocalWorkspaceFilesystem() {
+  return !isVercel();
 }
 
 export function isCloudProvider(provider: ProviderName) {

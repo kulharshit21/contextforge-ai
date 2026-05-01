@@ -38,7 +38,7 @@ import {
 } from "@/lib/memory/schemas";
 import { scanRepository } from "@/lib/repo/scanner";
 import { isoNow } from "@/lib/utils/date";
-import { isDemoMode } from "@/lib/utils/env";
+import { canUseLocalWorkspaceFilesystem, isDemoMode, isVercel } from "@/lib/utils/env";
 import { ensureDir, pathExists, readJsonIfExists, writeJsonPretty } from "@/lib/utils/fs";
 import { slugify } from "@/lib/utils/slug";
 
@@ -49,6 +49,10 @@ const STARTER_WORKSPACE_ROOT = path.join(
   "workspaces",
   "contextforge-starter",
 );
+const HOSTED_DEMO_WARNING =
+  "Hosted demo mode is active on Vercel. Local workspace files are unavailable in this deployment, so ContextForge is showing seeded demo data instead.";
+const HOSTED_DEMO_READ_ONLY_MESSAGE =
+  "Hosted demo mode is read-only on Vercel. Run ContextForge locally to create or edit workspace files.";
 
 type StoredProjectIndex = {
   projects: ProjectRecord[];
@@ -75,6 +79,59 @@ const STARTER_PROJECT_RECORD: ProjectRecord = {
     memoryUpdateBehavior: "preview_first",
   },
 };
+
+function isDemoProject(projectId: string) {
+  return projectId === DEMO_PROJECT_ID && isDemoMode();
+}
+
+function assertLocalWorkspaceWritesAvailable() {
+  if (!canUseLocalWorkspaceFilesystem()) {
+    throw new Error(HOSTED_DEMO_READ_ONLY_MESSAGE);
+  }
+}
+
+function buildDemoProjectCard() {
+  return {
+    ...demoProjectRecord,
+    memoryHealthScore: demoProjectHealthScore,
+    capsulesCount: 1,
+    lastUpdated: demoProjectRecord.updatedAt,
+  };
+}
+
+function buildDemoProjectSnapshot(warning?: string) {
+  return {
+    project: demoProjectRecord,
+    memoryFiles: demoMemoryFiles,
+    repoScan: demoRepoScan,
+    driftIssues: demoDriftIssues,
+    capsules: [
+      {
+        id: "demo-capsule",
+        fileName: "demo-capsule.md",
+        task: "Add pharmacy invoice feature",
+        createdAt: demoProjectRecord.updatedAt,
+        markdown: renderCapsuleMarkdown("Add pharmacy invoice feature", demoCapsule),
+        estimatedRawTokens: demoCapsule.estimated_raw_tokens,
+        estimatedCapsuleTokens: demoCapsule.estimated_capsule_tokens,
+        savedPercent: demoCapsule.saved_percent,
+      },
+    ],
+    exports: Object.entries(demoExports).map(([fileName, content]) => ({
+      id: fileName,
+      fileName,
+      content,
+    })),
+    overview: {
+      summary: demoMemoryFiles.find((file) => file.file_key === "PROJECT_STATE")?.summary ?? "",
+      recentDecisions: demoMemoryFiles.find((file) => file.file_key === "DECISIONS")?.items ?? [],
+      knownBugs: demoMemoryFiles.find((file) => file.file_key === "BUGS_AND_FIXES")?.items ?? [],
+      pendingTasks: demoMemoryFiles.find((file) => file.file_key === "CURRENT_TASKS")?.items ?? [],
+    },
+    memoryHealthScore: demoProjectHealthScore,
+    providerWarning: warning,
+  };
+}
 
 async function ensureProjectIndex() {
   await ensureDir(path.dirname(WORKSPACE_INDEX_PATH));
@@ -177,9 +234,18 @@ async function ensureStarterWorkspace() {
 }
 
 async function getStoredProjects() {
-  const projects = await ensureProjectIndex();
-  await ensureStarterWorkspace();
-  return projects;
+  if (!canUseLocalWorkspaceFilesystem()) {
+    return [];
+  }
+
+  try {
+    const projects = await ensureProjectIndex();
+    await ensureStarterWorkspace();
+    return projects;
+  } catch (error) {
+    console.error("Failed to load local workspace index.", error);
+    return [];
+  }
 }
 
 async function findProjectRecord(projectId: string) {
@@ -203,106 +269,85 @@ function buildProjectOverview(memoryFiles: Awaited<ReturnType<typeof loadMemoryF
 
 export async function listProjects() {
   const storedProjects = await getStoredProjects();
-  const projectCards = await Promise.all(
-    storedProjects.map(async (project) => {
-      const memoryFiles = await loadMemoryFiles(project.workspaceRoot);
-      const repoScan = await readRepoScan(project.workspaceRoot);
-      const driftIssues = calculateMemoryHealthScore(
-        (await analyzeMemoryDrift(project.workspaceRoot, memoryFiles, repoScan, project.settings.aiProvider))
-          .issues,
-      );
-      const capsules = await listSavedCapsules(project.workspaceRoot);
+  const projectCards = (
+    await Promise.all(
+      storedProjects.map(async (project) => {
+        try {
+          const memoryFiles = await loadMemoryFiles(project.workspaceRoot);
+          const repoScan = await readRepoScan(project.workspaceRoot);
+          const driftIssues = calculateMemoryHealthScore(
+            (await analyzeMemoryDrift(project.workspaceRoot, memoryFiles, repoScan, project.settings.aiProvider))
+              .issues,
+          );
+          const capsules = await listSavedCapsules(project.workspaceRoot);
 
-      return {
-        ...project,
-        memoryHealthScore: driftIssues,
-        capsulesCount: capsules.length,
-        lastUpdated: memoryFiles
-          .map((file) => file.updated_at)
-          .sort()
-          .at(-1) ?? project.updatedAt,
-      };
-    }),
-  );
+          return {
+            ...project,
+            memoryHealthScore: driftIssues,
+            capsulesCount: capsules.length,
+            lastUpdated: memoryFiles
+              .map((file) => file.updated_at)
+              .sort()
+              .at(-1) ?? project.updatedAt,
+          };
+        } catch (error) {
+          console.error(`Failed to load project card for ${project.id}.`, error);
+          return null;
+        }
+      }),
+    )
+  ).filter((project): project is NonNullable<typeof project> => Boolean(project));
 
   if (!isDemoMode()) {
     return projectCards;
   }
 
-  return [
-    {
-      ...demoProjectRecord,
-      memoryHealthScore: demoProjectHealthScore,
-      capsulesCount: 1,
-      lastUpdated: demoProjectRecord.updatedAt,
-    },
-    ...projectCards,
-  ];
+  return [buildDemoProjectCard(), ...projectCards];
 }
 
 export async function getProjectSnapshot(projectId: string) {
-  if (projectId === DEMO_PROJECT_ID && isDemoMode()) {
-    return {
-      project: demoProjectRecord,
-      memoryFiles: demoMemoryFiles,
-      repoScan: demoRepoScan,
-      driftIssues: demoDriftIssues,
-      capsules: [
-        {
-          id: "demo-capsule",
-          fileName: "demo-capsule.md",
-          task: "Add pharmacy invoice feature",
-          createdAt: demoProjectRecord.updatedAt,
-          markdown: renderCapsuleMarkdown("Add pharmacy invoice feature", demoCapsule),
-          estimatedRawTokens: demoCapsule.estimated_raw_tokens,
-          estimatedCapsuleTokens: demoCapsule.estimated_capsule_tokens,
-          savedPercent: demoCapsule.saved_percent,
-        },
-      ],
-      exports: Object.entries(demoExports).map(([fileName, content]) => ({
-        id: fileName,
-        fileName,
-        content,
-      })),
-      overview: {
-        summary: demoMemoryFiles.find((file) => file.file_key === "PROJECT_STATE")?.summary ?? "",
-        recentDecisions: demoMemoryFiles.find((file) => file.file_key === "DECISIONS")?.items ?? [],
-        knownBugs: demoMemoryFiles.find((file) => file.file_key === "BUGS_AND_FIXES")?.items ?? [],
-        pendingTasks: demoMemoryFiles.find((file) => file.file_key === "CURRENT_TASKS")?.items ?? [],
-      },
-      memoryHealthScore: demoProjectHealthScore,
-    };
+  if (isDemoProject(projectId)) {
+    return buildDemoProjectSnapshot(isVercel() ? HOSTED_DEMO_WARNING : undefined);
   }
 
-  const project = await findProjectRecord(projectId);
-  if (!project) {
+  if (!canUseLocalWorkspaceFilesystem()) {
     return null;
   }
 
-  const memoryFiles = await loadMemoryFiles(project.workspaceRoot);
-  const repoScan = await readRepoScan(project.workspaceRoot);
-  const driftAnalysis = await analyzeMemoryDrift(
-    project.workspaceRoot,
-    memoryFiles,
-    repoScan,
-    project.settings.aiProvider,
-  );
-  const capsules = await listSavedCapsules(project.workspaceRoot);
-  const exportsList = await listSavedExports(project.workspaceRoot);
-  const overview = buildProjectOverview(memoryFiles);
-  const memoryHealthScore = calculateMemoryHealthScore(driftAnalysis.issues);
+  try {
+    const project = await findProjectRecord(projectId);
+    if (!project) {
+      return null;
+    }
 
-  return {
-    project,
-    memoryFiles,
-    repoScan,
-    driftIssues: driftAnalysis.issues,
-    capsules,
-    exports: exportsList,
-    overview,
-    memoryHealthScore,
-    providerWarning: driftAnalysis.provider.warning,
-  };
+    const memoryFiles = await loadMemoryFiles(project.workspaceRoot);
+    const repoScan = await readRepoScan(project.workspaceRoot);
+    const driftAnalysis = await analyzeMemoryDrift(
+      project.workspaceRoot,
+      memoryFiles,
+      repoScan,
+      project.settings.aiProvider,
+    );
+    const capsules = await listSavedCapsules(project.workspaceRoot);
+    const exportsList = await listSavedExports(project.workspaceRoot);
+    const overview = buildProjectOverview(memoryFiles);
+    const memoryHealthScore = calculateMemoryHealthScore(driftAnalysis.issues);
+
+    return {
+      project,
+      memoryFiles,
+      repoScan,
+      driftIssues: driftAnalysis.issues,
+      capsules,
+      exports: exportsList,
+      overview,
+      memoryHealthScore,
+      providerWarning: driftAnalysis.provider.warning,
+    };
+  } catch (error) {
+    console.error(`Failed to load detailed snapshot for ${projectId}.`, error);
+    return isDemoMode() ? buildDemoProjectSnapshot(HOSTED_DEMO_WARNING) : null;
+  }
 }
 
 export async function createProject(input: {
@@ -311,6 +356,7 @@ export async function createProject(input: {
   repoUrl?: string;
   localPathHint?: string;
 }) {
+  assertLocalWorkspaceWritesAvailable();
   const projects = await getStoredProjects();
   const slug = slugify(input.name);
   const workspaceRoot = path.join(process.cwd(), "workspaces", slug);
@@ -348,6 +394,11 @@ export async function updateProjectSettings(
     description?: string;
   },
 ) {
+  assertLocalWorkspaceWritesAvailable();
+  if (isDemoProject(projectId)) {
+    throw new Error("Demo projects are read-only.");
+  }
+
   const projects = await getStoredProjects();
   const nextProjects = projects.map((project) => {
     if (project.id !== projectId) {
@@ -388,6 +439,7 @@ export async function updateProjectMemoryFile(
   fileKey: MemoryFileKey,
   rawContent: string,
 ) {
+  assertLocalWorkspaceWritesAvailable();
   const project = await findProjectRecord(projectId);
   if (!project) {
     throw new Error("Project not found.");
@@ -401,6 +453,7 @@ export async function updateProjectMemoryFile(
 }
 
 export async function saveUploadedRepoScan(projectId: string, scanJson: unknown) {
+  assertLocalWorkspaceWritesAvailable();
   const project = await findProjectRecord(projectId);
   if (!project) {
     throw new Error("Project not found.");
@@ -410,6 +463,7 @@ export async function saveUploadedRepoScan(projectId: string, scanJson: unknown)
 }
 
 export async function runProjectScan(projectId: string) {
+  assertLocalWorkspaceWritesAvailable();
   const project = await findProjectRecord(projectId);
   if (!project) {
     throw new Error("Project not found.");
@@ -432,6 +486,22 @@ export async function ingestProjectChat(
     extracted?: unknown;
   },
 ) {
+  if (isDemoProject(projectId)) {
+    if (payload.persist) {
+      throw new Error("Demo projects are read-only.");
+    }
+
+    if (payload.extracted) {
+      return payload.extracted;
+    }
+
+    return extractMemoryFromChat(
+      payload.text ?? "",
+      payload.mode ?? "Full extraction",
+      demoProjectRecord.settings.aiProvider,
+    );
+  }
+
   const project = await findProjectRecord(projectId);
   if (!project) {
     throw new Error("Project not found.");
@@ -471,11 +541,13 @@ export async function generateProjectCapsule(
     throw new Error("Project not found.");
   }
 
-  if ("workspaceRoot" in snapshot.project && snapshot.project.id === DEMO_PROJECT_ID) {
+  if (snapshot.project.id === DEMO_PROJECT_ID) {
     return {
       capsule: demoCapsule,
       markdown: renderCapsuleMarkdown(task, demoCapsule),
-      providerWarning: "Demo mode uses the mock provider and seeded capsule data.",
+      providerWarning: isVercel()
+        ? HOSTED_DEMO_WARNING
+        : "Demo mode uses the mock provider and seeded capsule data.",
     };
   }
 
@@ -494,6 +566,7 @@ export async function generateProjectCapsule(
   const markdown = renderCapsuleMarkdown(task, capsule);
 
   if (options?.persist) {
+    assertLocalWorkspaceWritesAvailable();
     await saveCapsule(snapshot.project.workspaceRoot, task, capsule);
   }
 
@@ -555,6 +628,7 @@ export async function generateProjectExports(projectId: string) {
   });
 
   if (snapshot.project.id !== DEMO_PROJECT_ID) {
+    assertLocalWorkspaceWritesAvailable();
     await Promise.all(
       Object.entries(bundle).map(([target, content]) =>
         saveExport(snapshot.project.workspaceRoot, target, content),
@@ -566,38 +640,56 @@ export async function generateProjectExports(projectId: string) {
 }
 
 export async function getDashboardStats() {
-  const projects = await listProjects();
-  const snapshots = await Promise.all(
-    projects.map((project) => getProjectSnapshot(project.id)),
-  );
-  const validSnapshots = snapshots.filter(
-    (snapshot): snapshot is NonNullable<typeof snapshot> => Boolean(snapshot),
-  );
+  try {
+    const projects = await listProjects();
+    const snapshots = await Promise.all(
+      projects.map((project) => getProjectSnapshot(project.id)),
+    );
+    const validSnapshots = snapshots.filter(
+      (snapshot): snapshot is NonNullable<typeof snapshot> => Boolean(snapshot),
+    );
 
-  return {
-    totalProjects: projects.length,
-    totalMemoryFiles: validSnapshots.reduce(
-      (total, snapshot) => total + snapshot.memoryFiles.length,
-      0,
-    ),
-    totalCapsules: validSnapshots.reduce(
-      (total, snapshot) => total + snapshot.capsules.length,
-      0,
-    ),
-    estimatedTokensSaved: validSnapshots.reduce(
-      (total, snapshot) =>
-        total +
-        snapshot.capsules.reduce(
-          (capsuleTotal, capsule) => capsuleTotal + (capsule.estimatedRawTokens - capsule.estimatedCapsuleTokens),
-          0,
-        ),
-      0,
-    ),
-    driftWarnings: validSnapshots.reduce(
-      (total, snapshot) => total + snapshot.driftIssues.length,
-      0,
-    ),
-    recentProjects: projects.slice(0, 4),
-    recentCapsules: validSnapshots.flatMap((snapshot) => snapshot.capsules).slice(0, 5),
-  };
+    return {
+      totalProjects: projects.length,
+      totalMemoryFiles: validSnapshots.reduce(
+        (total, snapshot) => total + snapshot.memoryFiles.length,
+        0,
+      ),
+      totalCapsules: validSnapshots.reduce(
+        (total, snapshot) => total + snapshot.capsules.length,
+        0,
+      ),
+      estimatedTokensSaved: validSnapshots.reduce(
+        (total, snapshot) =>
+          total +
+          snapshot.capsules.reduce(
+            (capsuleTotal, capsule) =>
+              capsuleTotal + (capsule.estimatedRawTokens - capsule.estimatedCapsuleTokens),
+            0,
+          ),
+        0,
+      ),
+      driftWarnings: validSnapshots.reduce(
+        (total, snapshot) => total + snapshot.driftIssues.length,
+        0,
+      ),
+      recentProjects: projects.slice(0, 4),
+      recentCapsules: validSnapshots.flatMap((snapshot) => snapshot.capsules).slice(0, 5),
+    };
+  } catch (error) {
+    console.error("Failed to load dashboard stats.", error);
+    const demoSnapshot = buildDemoProjectSnapshot(HOSTED_DEMO_WARNING);
+    return {
+      totalProjects: 1,
+      totalMemoryFiles: demoSnapshot.memoryFiles.length,
+      totalCapsules: demoSnapshot.capsules.length,
+      estimatedTokensSaved: demoSnapshot.capsules.reduce(
+        (total, capsule) => total + (capsule.estimatedRawTokens - capsule.estimatedCapsuleTokens),
+        0,
+      ),
+      driftWarnings: demoSnapshot.driftIssues.length,
+      recentProjects: [buildDemoProjectCard()],
+      recentCapsules: demoSnapshot.capsules,
+    };
+  }
 }
