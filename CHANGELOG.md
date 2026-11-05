@@ -4,6 +4,12 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Dependency vulnerability audit and triage (issue #2):
+  - Upgraded `simple-git` to `^4.0.2` resolving critical vulnerability GHSA-v5rq-49vh-5v5c (`VISUAL` editor omission) and command injection vectors in `@simple-git/argv-parser`. Refactored git calls to use named exports and strict typing.
+  - Upgraded `zod` to `^4.6.7` resolving high severity vulnerability GHSA-mrhx-c7xc-m3w5 (collection parsing memory exhaustion).
+  - Added package overrides for `postcss` (`^8.5.32`), `source-map-js` (`^1.2.2`), and `nanoid` (`^3.3.20`), eliminating path traversal and DoS advisories.
+  - Authored comprehensive dependency triage in `docs/DEPENDENCY_AUDIT.md` analyzing runtime reachability and documenting compensating controls for all remaining transitive advisories.
+
 - Added focused regression test suite for note classification and drift detection (issue #13):
   - Covered deterministic classification precedence across mixed decision/API, bug/feature, failed attempts, and privacy rules.
   - Covered drift detection for missing scripts, framework mismatches, deleted paths, and undocumented environment variables.

@@ -3,7 +3,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import matter from "gray-matter";
-import simpleGit from "simple-git";
+import { simpleGit } from "simple-git";
 
 import { isoNow } from "@/lib/utils/date";
 import {
