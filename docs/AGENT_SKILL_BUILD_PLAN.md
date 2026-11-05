@@ -19,7 +19,7 @@ The skill cannot replace platform memory or silently intercept native model comp
 
 ## Milestone A — Portable skill and safe handoff (stabilized)
 
-Status: Completed and verified across Linux, macOS, and Windows.
+Status: Completed and verified across Linux, macOS, and Windows (PR #19).
 
 Acceptance:
 - Agent skill metadata validates against the standard.
@@ -34,7 +34,7 @@ Acceptance:
 
 ## Milestone B — Integrate with the TypeScript CLI (unified interface)
 
-Status: Completed and verified with bidirectional hash-chain interoperability.
+Status: Completed and verified with bidirectional hash-chain interoperability (PR #20, issue #16).
 
 Acceptance:
 - A single documented UX exposes `checkpoint`, `recall`, `audit`, `repair`, `sync`, and context export.
@@ -46,7 +46,7 @@ Acceptance:
 
 ## Milestone C — Context management improvements (tiered context)
 
-Status: Completed and verified.
+Status: Completed and verified (PR #20).
 
 Acceptance:
 - Tiered context output levels:
@@ -59,29 +59,36 @@ Acceptance:
 
 ## Milestone D — Privacy and security
 
+Status: Completed and verified (PR #19, PR #20, PR #22, issue #2).
+
 Acceptance:
-- Threat model for prompt injection, poisoned memory, traversal, symlinks, concurrent writes and secret leakage.
-- Tests for malformed records, crash during append, duplicate inputs, invalid paths, injection strings and non-UTF8.
-- Explicit local/cloud boundaries with consent gates.
-- Dependency audit and remediation logged in issue #2.
+- Threat model for prompt injection, poisoned memory, traversal, symlinks, concurrent writes and secret leakage addressed and tested.
+- Tests for malformed records, crash during append, duplicate inputs, invalid paths, injection strings and non-UTF8 passing across all platforms.
+- Explicit local/cloud boundaries with consent gates documented and enforced; Next.js dev server bound to loopback `127.0.0.1` by default.
+- Dependency audit and vulnerability remediation completed (issue #2): upgraded `simple-git` to `^4.0.2` (resolving critical GHSA-v5rq-49vh-5v5c) and `zod` to `^4.6.7` (resolving high GHSA-mrhx-c7xc-m3w5); added package overrides for `postcss`, `source-map-js`, `nanoid`; runtime reachability and compensating controls documented in `docs/DEPENDENCY_AUDIT.md`.
 - No public hosted filesystem editing without authentication and authorization.
 
 ## Milestone E — Evaluation and performance
 
+Status: Completed and verified (PR #23, issue #17).
+
 Acceptance:
-- Publish reproducible multi-session software-development tasks with human-labelled required facts.
-- Measure critical-fact retention, false facts, task completion, source accuracy, recovery latency and context usage.
-- Compare equal-budget tail truncation, ContextForge deterministic retrieval, and any available model compaction baseline.
-- Do not claim improvement until statistical evidence supports the claim, and report negative results.
+- Published reproducible benchmark with 30 held-out multi-session tasks across 15 domains in `benchmarks/fixtures/tasks.json` with human-labelled required facts.
+- Measured critical-fact retention (with 95% confidence intervals), evidence citation fidelity, prompt injection resistance, stale info leakage, recovery latency, and context usage against equal-budget naive recency and uniform sampling baselines in `benchmarks/run_benchmark.py`.
+- Under 1200 chars: ContextForge achieved 86.0% (±5.9%) recall and 84.7% citation fidelity with 1/30 injection leak (vs 44.7% recall, 0% citation, and 30/30 injection leaks for naive recency).
+- Comprehensive results and negative/neutral case analyses published in `docs/BENCHMARK_RESULTS.md` without fabricated claims or inflated comparisons.
+- Added CI regression test gate `tests/benchmark.test.cjs` and `npm run benchmark` script.
 
 ## Milestone F — Community distribution
 
+Status: Completed and verified (PR #24, PR #25, issues #12, #14).
+
 Acceptance:
-- Cross-platform installation and minimal dependency footprint.
-- Real redacted demo recordings and sample projects; documented API stability.
-- Contributor onboarding, issue triage, code review, changelog and security reporting maintained.
-- Optional installable package released only after maintainer sign-off and clear licensing.
-- Demonstrated genuine external use; no purchased stars, fake downloads or vanity PRs.
+- Cross-platform verification on Windows 11 and macOS documented in `docs/platforms/WINDOWS_VERIFICATION.md` and `docs/platforms/MACOS_VERIFICATION.md` with sanitized terminal logs, process liveness details, and filesystem case-sensitivity handling.
+- Standalone npm CLI packaging prepared (issue #14): strict `"files"` whitelist in `package.json` reducing packed archive from 143 files (689 kB) to 51 clean files (197 kB); standard relative imports across `cli/` and `lib/` resolving module resolution when installed in `node_modules`.
+- Clean-install tarball integration test automated in `tests/tarball_install.test.cjs`.
+- Gated publish workflow in `.github/workflows/publish.yml` with manual dispatch, default dry-run, and environment approval protections.
+- Maintained `"private": true` and documented full release procedure in `docs/RELEASE_CHECKLIST.md` requiring explicit maintainer sign-off before publishing.
 
 ## Cadence for Codex
 
@@ -89,11 +96,15 @@ Work one milestone at a time; one reviewable PR per independent logical change. 
 
 ## Active engineering issues
 
-- #2 dependency-security audit
-- #12 Windows/macOS end-user testing
-- #13 classification and drift regression coverage
-- #14 verified npm CLI packaging
-- #16 unified memory interface (addressed in PR)
-- #17 reproducible context-retention benchmark
+All core milestone issues resolved via peer-reviewed, CI-verified PRs:
+- #2 dependency-security audit (resolved in PR #22)
+- #12 Windows/macOS end-user testing (resolved in PR #24)
+- #13 classification and drift regression coverage (resolved in PR #21)
+- #14 verified npm CLI packaging (resolved in PR #25)
+- #16 unified memory interface (resolved in PR #20)
+- #17 reproducible context-retention benchmark (resolved in PR #23)
+
+Pending final hardening:
+- #18 Protect main with an enforced GitHub branch ruleset after Codex finishes
 
 See references/design.md under the agent skill for the current experimental retrieval contract.

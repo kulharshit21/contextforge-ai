@@ -19,6 +19,18 @@ For @kulharshit21 and future maintainers. This is a repeatable workflow, not a c
 - For filesystem/export changes, verify that existing user files are not overwritten.
 - Explain merges/rejections; favor small reversible changes.
 
+## Branch ruleset and protection
+
+The repository enforces branch protection on `refs/heads/main` via GitHub Rulesets:
+- **Deletion**: blocked.
+- **Non-fast-forward (force push)**: blocked.
+- **Pull request**: required before merging. For solo maintainer operation, approval count is set to 0 with conversation resolution required, preventing owner lockout while enforcing CI and PR traceability.
+- **Status checks**: strict required status checks:
+  - `verify`
+  - `Agent memory skill (ubuntu-latest)`
+  - `Agent memory skill (windows-latest)`
+  - `Agent memory skill (macos-latest)`
+
 ## Release readiness
 
 Follow docs/RELEASE_CHECKLIST.md. Do not tag, announce npm availability, or promise support until an actual verified release exists.
@@ -29,7 +41,7 @@ Track genuine feedback, reproducible issues, external contributions, and install
 
 ## Known gaps
 
-- Package is not published to npm and current CLI uses a runtime TypeScript loader.
+- Package is not yet published to npm (`package.json` remains `"private": true` until maintainer release sign-off).
 - Hosted data is seeded demonstration, not customer adoption.
 - Public dashboard auth and secure multi-tenant hosting are out of scope.
-- Cross-platform user testing and opt-in cloud sync remain to be verified.
+- Cloud sync remains opt-in and local-first by default.

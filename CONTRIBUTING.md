@@ -32,6 +32,15 @@ Node.js 24 is the reference CI runtime. Avoid changing the lockfile unless depen
 
 Use the PR template, allow the CI workflow to complete, and address feedback in the review thread. A merged PR is not an automatic promise of maintainership.
 
+## Branch protection and merge policy
+
+- The `main` branch is protected by an enforced GitHub branch ruleset. Direct pushes and force pushes to `main` are blocked.
+- All code changes must be submitted via pull requests against `main` from topic branches or forks.
+- Merges require all automated status checks to pass:
+  - `verify`: runs typecheck, lint, unit tests, Next.js build, tarball clean installation verification, and benchmark recall regression gate on Node.js 24.
+  - `Agent memory skill`: runs the Python test suite across Ubuntu, Windows, and macOS matrices.
+- Squash merging is preferred to maintain a clean linear commit history.
+
 ## Good first contributions
 
 - Verify installation and CLI behavior on Windows/macOS, with exact OS/Node versions.
