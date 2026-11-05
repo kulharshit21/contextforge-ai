@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 
 import fg from "fast-glob";
@@ -35,6 +35,36 @@ const DEFAULT_IGNORE_PATTERNS = [
 
 const MAX_FILE_SIZE_BYTES = 256_000;
 const MAX_TOTAL_SCAN_BYTES = 4_000_000;
+
+// Symlink/junction traversal cannot be reliably disabled in the glob layer on
+// all platforms (Windows junctions are still descended into by fast-glob even
+// with followSymbolicLinks: false), so every matched file is verified to
+// resolve inside the canonical scan root before it is reported or read.
+async function filterToRootFiles(workspaceRoot: string, relativePaths: string[]): Promise<string[]> {
+  let canonicalRoot: string;
+  try {
+    canonicalRoot = await realpath(workspaceRoot);
+  } catch {
+    return [];
+  }
+
+  const kept: string[] = [];
+  for (const relativePath of relativePaths) {
+    try {
+      const realFile = await realpath(path.join(workspaceRoot, relativePath));
+      const relative = path.relative(canonicalRoot, realFile);
+      const insideRoot = relative !== ".."
+        && !relative.startsWith(".." + path.sep)
+        && !path.isAbsolute(relative);
+      if (insideRoot) {
+        kept.push(relativePath);
+      }
+    } catch {
+      // The file vanished between the glob and this check; skip it.
+    }
+  }
+  return kept;
+}
 
 async function readIgnorePatterns(workspaceRoot: string) {
   const ignoreFilePath = path.join(workspaceRoot, ".contextforgeignore");
@@ -125,13 +155,17 @@ async function getGitFacts(workspaceRoot: string) {
 }
 
 async function filterSmallTextFiles(workspaceRoot: string, patterns: string[]) {
-  const entries = await fg(patterns, {
-    cwd: workspaceRoot,
-    ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
-    dot: false,
-    unique: true,
-    onlyFiles: true,
-  });
+  const entries = await filterToRootFiles(
+    workspaceRoot,
+    await fg(patterns, {
+      cwd: workspaceRoot,
+      followSymbolicLinks: false,
+      ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
+      dot: false,
+      unique: true,
+      onlyFiles: true,
+    }),
+  );
 
   const files: string[] = [];
   let bytesRead = 0;
@@ -163,49 +197,73 @@ export async function scanRepository(workspaceRoot: string): Promise<RepoScan> {
     (await readJsonIfExists<Record<string, unknown>>(path.join(workspaceRoot, "package.json"))) ??
     null;
 
-  const appRoutes = await fg(["app/**/page.tsx", "src/app/**/page.tsx"], {
-    cwd: workspaceRoot,
-    ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
-    onlyFiles: true,
-  });
-
-  const apiRoutes = await fg(
-    ["app/api/**/route.ts", "src/app/api/**/route.ts", "pages/api/**/*.{ts,js}"],
-    {
+  const appRoutes = await filterToRootFiles(
+    workspaceRoot,
+    await fg(["app/**/page.tsx", "src/app/**/page.tsx"], {
       cwd: workspaceRoot,
+      followSymbolicLinks: false,
       ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
       onlyFiles: true,
-    },
+    }),
   );
 
-  const libraryFiles = await fg(["lib/**/*.{ts,tsx}", "src/lib/**/*.{ts,tsx}"], {
-    cwd: workspaceRoot,
-    ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
-    onlyFiles: true,
-  });
-
-  const databaseMigrations = await fg(
-    ["supabase/migrations/**/*.sql", "prisma/migrations/**/*", "db/migrations/**/*"],
-    {
-      cwd: workspaceRoot,
-      ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
-      onlyFiles: true,
-    },
+  const apiRoutes = await filterToRootFiles(
+    workspaceRoot,
+    await fg(
+      ["app/api/**/route.ts", "src/app/api/**/route.ts", "pages/api/**/*.{ts,js}"],
+      {
+        cwd: workspaceRoot,
+        followSymbolicLinks: false,
+        ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
+        onlyFiles: true,
+      },
+    ),
   );
 
-  const envExamples = await fg([".env.example", ".env*.example", "**/*.env.example"], {
-    cwd: workspaceRoot,
-    ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
-    onlyFiles: true,
-  });
-
-  const testFiles = await fg(
-    ["**/*.{test,spec}.{ts,tsx,js,jsx}", "tests/**/*.{ts,tsx,js,jsx}"],
-    {
+  const libraryFiles = await filterToRootFiles(
+    workspaceRoot,
+    await fg(["lib/**/*.{ts,tsx}", "src/lib/**/*.{ts,tsx}"], {
       cwd: workspaceRoot,
+      followSymbolicLinks: false,
       ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
       onlyFiles: true,
-    },
+    }),
+  );
+
+  const databaseMigrations = await filterToRootFiles(
+    workspaceRoot,
+    await fg(
+      ["supabase/migrations/**/*.sql", "prisma/migrations/**/*", "db/migrations/**/*"],
+      {
+        cwd: workspaceRoot,
+        followSymbolicLinks: false,
+        ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
+        onlyFiles: true,
+      },
+    ),
+  );
+
+  const envExamples = await filterToRootFiles(
+    workspaceRoot,
+    await fg([".env.example", ".env*.example", "**/*.env.example"], {
+      cwd: workspaceRoot,
+      followSymbolicLinks: false,
+      ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
+      onlyFiles: true,
+    }),
+  );
+
+  const testFiles = await filterToRootFiles(
+    workspaceRoot,
+    await fg(
+      ["**/*.{test,spec}.{ts,tsx,js,jsx}", "tests/**/*.{ts,tsx,js,jsx}"],
+      {
+        cwd: workspaceRoot,
+        followSymbolicLinks: false,
+        ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
+        onlyFiles: true,
+      },
+    ),
   );
 
   const textScan = await filterSmallTextFiles(workspaceRoot, [

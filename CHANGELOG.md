@@ -8,6 +8,8 @@ This project follows the general structure of Keep a Changelog. Versions below a
   - `PUT /api/memory` now validates `fileKey` at runtime with zod. Previously a request with a traversal value such as `../../../../name` (accepted despite the TypeScript union type) could write attacker-controlled `.md` files outside the project workspace, including overwriting unrelated repositories' agent instruction files.
   - `saveMemoryFile`/`saveMemoryFileRaw` reject unknown memory file keys before path construction, closing the same hole for any non-HTTP caller.
   - `PUT /api/projects/scan` no longer scans arbitrary filesystem paths through `localPathHint`: scan targets must exist, must not be symlinks, and must stay inside the dashboard checkout unless `CONTEXTFORGE_ALLOW_EXTERNAL_SCAN=1` is set. Previously the endpoint disclosed file listings, README content, and git history of any directory on disk.
+  - Scan-root validation compares canonical `realpath` paths on both sides, so a symlinked parent inside the checkout can no longer smuggle a canonically-outside directory past the lexical containment check, and the scanner reads exactly the validated canonical path.
+  - The repository scanner verifies that every matched file resolves inside the scan root before listing or reading it (fast-glob still descends into Windows junctions even with `followSymbolicLinks: false`), so internal symlinks cannot leak content from outside the validated root. Opt-in external scans now record a visible warning in the scan result.
   - `POST /api/projects` now type-checks `repoUrl`/`localPathHint` so non-string values cannot poison `workspaces/projects.json` and break project listing.
   - Added regression tests in `tests/api-path-safety.test.cjs`.
 

@@ -116,7 +116,7 @@ const SCAN_BOUNDARY_SCRIPT = [
   '',
   '// 1. The starter project (hint = dashboard root itself) still scans fine.',
   'const starterScan = await runProjectScan("starter-local");',
-  'assert.equal(starterScan.workspace_root.toLowerCase(), path.resolve(process.cwd()).toLowerCase());',
+  'assert.equal(starterScan.workspace_root.toLowerCase(), fs.realpathSync(process.cwd()).toLowerCase());',
   '',
   '// 2. A directory inside the dashboard root scans fine.',
   'const sampleDir = path.join(process.cwd(), "sample-repo");',
@@ -125,7 +125,7 @@ const SCAN_BOUNDARY_SCRIPT = [
   'fs.writeFileSync(path.join(sampleDir, "README.md"), "# Sample repo\\n");',
   'const inside = await createProject({ name: "inside-scan", description: "", localPathHint: sampleDir });',
   'const insideScan = await runProjectScan(inside.id);',
-  'assert.equal(insideScan.workspace_root.toLowerCase(), sampleDir.toLowerCase());',
+  'assert.equal(insideScan.workspace_root.toLowerCase(), fs.realpathSync(sampleDir).toLowerCase());',
   'assert.ok(Array.isArray(insideScan.app_routes));',
   '',
   '// 3. A missing directory fails with a clear error instead of raw scandir noise.',
@@ -156,7 +156,7 @@ const SCAN_OPT_IN_SCRIPT = [
   'const outside = await createProject({ name: "opt-in-scan", description: "",',
   '  localPathHint: outsideFixture });',
   'const scan = await runProjectScan(outside.id);',
-  'assert.equal(scan.workspace_root.toLowerCase(), path.resolve(outsideFixture).toLowerCase());',
+  'assert.equal(scan.workspace_root.toLowerCase(), fs.realpathSync(outsideFixture).toLowerCase());',
   '',
   'console.log("scan opt-in check passed");',
 ].join("\n");
@@ -217,4 +217,89 @@ test("project scan refuses external paths even when the opt-in env var is disabl
   assert.equal(result.status, 0,
     "scan opt-off script failed:\n" + result.stdout + "\n" + result.stderr);
   assert.match(result.stdout, /scan opt-off check passed/);
+});
+
+// Verifies canonical (realpath) boundary checks: a symlinked parent inside the
+// dashboard root must not smuggle a canonically-outside target past the
+// lexical check, direct symlink targets stay refused, and the scanner itself
+// must not traverse internal symlinks out of the validated root.
+const SCAN_SYMLINK_SCRIPT = [
+  'import assert from "node:assert/strict";',
+  'import fs from "node:fs";',
+  'import path from "node:path";',
+  'import { pathToFileURL } from "node:url";',
+  '',
+  'const repoRoot = process.env.CONTEXTFORGE_REPO_ROOT;',
+  'const outsideDir = process.env.CONTEXTFORGE_OUTSIDE_DIR;',
+  'const outsideApp = process.env.CONTEXTFORGE_OUTSIDE_APP;',
+  'const projectsUrl = pathToFileURL(path.join(repoRoot, "lib", "server", "projects.ts")).href;',
+  'const { createProject, runProjectScan } = await import(projectsUrl);',
+  '',
+  'function trySymlink(target, linkPath) {',
+  '  try {',
+  '    fs.symlinkSync(target, linkPath, process.platform === "win32" ? "junction" : "dir");',
+  '    return true;',
+  '  } catch (error) {',
+  '    if (error && ["EPERM", "EACCES", "ENOSYS"].includes(error.code)) return false;',
+  '    throw error;',
+  '  }',
+  '}',
+  '',
+  '// 1. Symlinked parent inside the root with a real leaf subdir outside it.',
+  'const parentLink = path.join(process.cwd(), "link-parent");',
+  'if (trySymlink(outsideDir, parentLink)) {',
+  '  const bypassTarget = path.join(parentLink, "inner");',
+  '  const bypass = await createProject({ name: "symlink-bypass", description: "",',
+  '    localPathHint: bypassTarget });',
+  '  await assert.rejects(() => runProjectScan(bypass.id), /Refusing to scan directories outside/);',
+  '',
+  '  // 2. A direct symlink target stays refused with the symlink-specific error.',
+  '  const leafLink = path.join(process.cwd(), "link-leaf");',
+  '  fs.symlinkSync(path.join(outsideDir, "inner"), leafLink,',
+  '    process.platform === "win32" ? "junction" : "dir");',
+  '  const direct = await createProject({ name: "symlink-direct", description: "",',
+  '    localPathHint: leafLink });',
+  '  await assert.rejects(() => runProjectScan(direct.id), /cannot be a symbolic link/);',
+  '',
+  '  // 3. An internal symlink inside an approved root is not traversed by the scanner.',
+  '  const insideRoot = path.join(process.cwd(), "sample-internal");',
+  '  fs.mkdirSync(insideRoot, { recursive: true });',
+  '  fs.writeFileSync(path.join(insideRoot, "package.json"), JSON.stringify({ name: "sample-internal" }));',
+  '  fs.writeFileSync(path.join(insideRoot, "README.md"), "# Internal sample\\n");',
+  '  fs.symlinkSync(path.join(outsideApp, "app"), path.join(insideRoot, "app"),',
+  '    process.platform === "win32" ? "junction" : "dir");',
+  '  const internal = await createProject({ name: "internal-scan", description: "",',
+  '    localPathHint: insideRoot });',
+  '  const internalScan = await runProjectScan(internal.id);',
+  '  assert.equal(internalScan.workspace_root.toLowerCase(), fs.realpathSync(insideRoot).toLowerCase());',
+  '  assert.deepEqual(internalScan.app_routes, [], "scanner must not traverse internal symlinks");',
+  '  assert.ok(!JSON.stringify(internalScan).includes("OUTSIDE-MARKER"),',
+  '    "outside content must not leak into the scan result");',
+  '',
+  '  console.log("scan symlink checks passed");',
+  '} else {',
+  '  console.log("scan symlink checks skipped (symlink creation not permitted)");',
+  '}',
+].join("\n");
+
+test("scan boundary blocks symlinked parents, direct symlinks, and internal symlink traversal", (t) => {
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "contextforge-symlink-out-"));
+  t.after(() => fs.rmSync(outsideDir, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(outsideDir, "inner", "app"), { recursive: true });
+  fs.writeFileSync(path.join(outsideDir, "inner", "package.json"), JSON.stringify({ name: "outside-target" }));
+  fs.writeFileSync(path.join(outsideDir, "inner", "README.md"), "# OUTSIDE-MARKER secret content beyond the boundary\n");
+  fs.writeFileSync(path.join(outsideDir, "inner", "app", "page.tsx"), "export default () => null;\n");
+
+  const outsideApp = fs.mkdtempSync(path.join(os.tmpdir(), "contextforge-symlink-app-"));
+  t.after(() => fs.rmSync(outsideApp, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(outsideApp, "app"), { recursive: true });
+  fs.writeFileSync(path.join(outsideApp, "app", "page.tsx"), "export default () => null;\n");
+
+  const { result } = runTsxScript(t, "scan-symlink.mts", SCAN_SYMLINK_SCRIPT, {
+    CONTEXTFORGE_OUTSIDE_DIR: outsideDir,
+    CONTEXTFORGE_OUTSIDE_APP: outsideApp,
+  });
+  assert.equal(result.status, 0,
+    "scan symlink script failed:\n" + result.stdout + "\n" + result.stderr);
+  assert.match(result.stdout, /scan symlink (checks passed|checks skipped)/);
 });
