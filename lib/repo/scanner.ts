@@ -2,7 +2,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 
 import fg from "fast-glob";
-import simpleGit from "simple-git";
+import { simpleGit } from "simple-git";
 
 import { isoNow } from "@/lib/utils/date";
 import { pathExists, readJsonIfExists, readTextIfExists } from "@/lib/utils/fs";
@@ -108,7 +108,7 @@ async function getGitFacts(workspaceRoot: string) {
     return {
       branch,
       commitHash,
-      recentCommits: log.all.map((commit) => ({
+      recentCommits: log.all.map((commit: { hash: string; message: string; author_name: string; date: string }) => ({
         hash: commit.hash,
         message: commit.message,
         author: commit.author_name,
