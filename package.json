@@ -13,7 +13,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "contextforge": "node ./bin/contextforge.js",
-    "test": "node --test tests/*.test.cjs"
+    "test": "node --test tests/*.test.cjs",
+    "benchmark": "python benchmarks/run_benchmark.py"
   },
   "dependencies": {
     "@google/genai": "^1.51.0",
