@@ -55,6 +55,11 @@ export function canUseLocalWorkspaceFilesystem() {
   return !isVercel();
 }
 
+export function canScanExternalPaths() {
+  const value = getEnvValue("CONTEXTFORGE_ALLOW_EXTERNAL_SCAN").toLowerCase();
+  return value === "1" || value === "true";
+}
+
 export function isCloudProvider(provider: ProviderName) {
   return provider === "gemini";
 }

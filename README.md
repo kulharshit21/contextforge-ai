@@ -99,6 +99,8 @@ The journal is stored under `.contextforge/agent-memory/events.jsonl`. Each entr
 
 The dashboard is a **localhost development tool**, not an authenticated multi-user service. Vercel hosts a read-only seeded demo; do not expose local filesystem-backed endpoints to the public internet. Next.js is upgraded to ^16.4.5 (resolving [GHSA-8h8q-6873-q5fj](https://github.com/vercel/next.js/security/advisories/GHSA-8h8q-6873-q5fj); see `docs/DEPENDENCY_AUDIT.md`).
 
+Two local-boundary rules apply to the dashboard API: memory file edits accept only the ten known memory file keys (traversal values are rejected), and `POST /api/projects` with a `localPathHint` can only scan directories that canonically resolve inside the dashboard checkout — symlinked parents cannot smuggle in outside paths — unless you start the dashboard with `CONTEXTFORGE_ALLOW_EXTERNAL_SCAN=1`. The scanner never follows symlinks out of the validated root: direct reads (README, package.json, `.contextforgeignore`) refuse symlinks, matched files are verified to resolve inside the root, and git metadata is only read from a real `.git` directory inside the root (symlinked `.git` and worktree-style gitdir pointers report unknown git facts). Opt-in external scans record a warning in the scan result. Note that the opt-in flag exposes an unauthenticated scan of arbitrary local directories to anyone who can reach the dashboard port; keep the server bound to loopback (the default) and leave the flag off on shared machines.
+
 To start the dashboard from this source checkout:
 
 ~~~bash

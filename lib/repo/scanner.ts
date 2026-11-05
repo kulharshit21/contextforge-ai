@@ -1,11 +1,11 @@
-import { stat } from "node:fs/promises";
+import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 
 import fg from "fast-glob";
 import { simpleGit } from "simple-git";
 
 import { isoNow } from "../utils/date";
-import { pathExists, readJsonIfExists, readTextIfExists } from "../utils/fs";
+import { pathExists } from "../utils/fs";
 
 import { RepoScanSchema, type RepoScan } from "../memory/schemas";
 
@@ -36,10 +36,60 @@ const DEFAULT_IGNORE_PATTERNS = [
 const MAX_FILE_SIZE_BYTES = 256_000;
 const MAX_TOTAL_SCAN_BYTES = 4_000_000;
 
-async function readIgnorePatterns(workspaceRoot: string) {
-  const ignoreFilePath = path.join(workspaceRoot, ".contextforgeignore");
-  const content = await readTextIfExists(ignoreFilePath);
+// Symlink/junction traversal cannot be reliably disabled in the glob layer on
+// all platforms (Windows junctions are still descended into by fast-glob even
+// with followSymbolicLinks: false), so every matched file is verified to
+// resolve inside the canonical scan root before it is reported or read.
+async function filterToRootFiles(workspaceRoot: string, relativePaths: string[]): Promise<string[]> {
+  let canonicalRoot: string;
+  try {
+    canonicalRoot = await realpath(workspaceRoot);
+  } catch {
+    return [];
+  }
 
+  const kept: string[] = [];
+  for (const relativePath of relativePaths) {
+    try {
+      const realFile = await realpath(path.join(workspaceRoot, relativePath));
+      const relative = path.relative(canonicalRoot, realFile);
+      const insideRoot = relative !== ".."
+        && !relative.startsWith(".." + path.sep)
+        && !path.isAbsolute(relative);
+      if (insideRoot) {
+        kept.push(relativePath);
+      }
+    } catch {
+      // The file vanished between the glob and this check; skip it.
+    }
+  }
+  return kept;
+}
+
+// Direct reads must not follow symlinks out of the scan root: a symlinked
+// README.md or package.json would otherwise disclose outside file content
+// even when the root itself is canonically validated. Symlinks are refused
+// uniformly, consistent with the journal and skill-lifecycle policies.
+async function readRegularFileIfExists(workspaceRoot: string, filename: string): Promise<string | null> {
+  const filePath = path.join(workspaceRoot, filename);
+  let stats;
+  try {
+    stats = await lstat(filePath);
+  } catch {
+    return null;
+  }
+  if (stats.isSymbolicLink() || !stats.isFile()) {
+    return null;
+  }
+  try {
+    return await readFile(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+async function readIgnorePatterns(workspaceRoot: string) {
+  const content = await readRegularFileIfExists(workspaceRoot, ".contextforgeignore");
   if (!content) {
     return [];
   }
@@ -91,14 +141,50 @@ function detectFramework(packageJson: Record<string, unknown> | null, files: str
 
 async function summarizeReadme(workspaceRoot: string) {
   const readme =
-    (await readTextIfExists(path.join(workspaceRoot, "README.md"))) ??
-    (await readTextIfExists(path.join(workspaceRoot, "readme.md"))) ??
+    (await readRegularFileIfExists(workspaceRoot, "README.md")) ??
+    (await readRegularFileIfExists(workspaceRoot, "readme.md")) ??
     "";
 
   return readme.replace(/\s+/g, " ").trim().slice(0, 800);
 }
 
+// Git metadata can point outside the scan root through a symlinked `.git` or
+// a worktree-style `.git` file with a `gitdir:` path to another repository;
+// git would then disclose that repository's branch and history. Only trust
+// git facts when `.git` is a real directory resolving inside the canonical
+// root. Worktree checkouts (whose `.git` is a file) therefore report unknown
+// git facts, which is the safe default for an informational scan.
+async function hasContainedGitDirectory(workspaceRoot: string): Promise<boolean> {
+  const gitPath = path.join(workspaceRoot, ".git");
+  let stats;
+  try {
+    stats = await lstat(gitPath);
+  } catch {
+    return false;
+  }
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    return false;
+  }
+  try {
+    const [realRoot, realGit] = await Promise.all([realpath(workspaceRoot), realpath(gitPath)]);
+    const relative = path.relative(realRoot, realGit);
+    return relative !== ".."
+      && !relative.startsWith(".." + path.sep)
+      && !path.isAbsolute(relative);
+  } catch {
+    return false;
+  }
+}
+
 async function getGitFacts(workspaceRoot: string) {
+  if (!(await hasContainedGitDirectory(workspaceRoot))) {
+    return {
+      branch: "unknown",
+      commitHash: "unknown",
+      recentCommits: [],
+    };
+  }
+
   try {
     const git = simpleGit(workspaceRoot);
     const branch = await git.revparse(["--abbrev-ref", "HEAD"]);
@@ -125,13 +211,17 @@ async function getGitFacts(workspaceRoot: string) {
 }
 
 async function filterSmallTextFiles(workspaceRoot: string, patterns: string[]) {
-  const entries = await fg(patterns, {
-    cwd: workspaceRoot,
-    ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
-    dot: false,
-    unique: true,
-    onlyFiles: true,
-  });
+  const entries = await filterToRootFiles(
+    workspaceRoot,
+    await fg(patterns, {
+      cwd: workspaceRoot,
+      followSymbolicLinks: false,
+      ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
+      dot: false,
+      unique: true,
+      onlyFiles: true,
+    }),
+  );
 
   const files: string[] = [];
   let bytesRead = 0;
@@ -159,53 +249,78 @@ async function filterSmallTextFiles(workspaceRoot: string, patterns: string[]) {
 }
 
 export async function scanRepository(workspaceRoot: string): Promise<RepoScan> {
-  const packageJson =
-    (await readJsonIfExists<Record<string, unknown>>(path.join(workspaceRoot, "package.json"))) ??
-    null;
+  const packageJsonRaw = await readRegularFileIfExists(workspaceRoot, "package.json");
+  const packageJson = packageJsonRaw === null
+    ? null
+    : (JSON.parse(packageJsonRaw) as Record<string, unknown>);
 
-  const appRoutes = await fg(["app/**/page.tsx", "src/app/**/page.tsx"], {
-    cwd: workspaceRoot,
-    ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
-    onlyFiles: true,
-  });
-
-  const apiRoutes = await fg(
-    ["app/api/**/route.ts", "src/app/api/**/route.ts", "pages/api/**/*.{ts,js}"],
-    {
+  const appRoutes = await filterToRootFiles(
+    workspaceRoot,
+    await fg(["app/**/page.tsx", "src/app/**/page.tsx"], {
       cwd: workspaceRoot,
+      followSymbolicLinks: false,
       ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
       onlyFiles: true,
-    },
+    }),
   );
 
-  const libraryFiles = await fg(["lib/**/*.{ts,tsx}", "src/lib/**/*.{ts,tsx}"], {
-    cwd: workspaceRoot,
-    ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
-    onlyFiles: true,
-  });
-
-  const databaseMigrations = await fg(
-    ["supabase/migrations/**/*.sql", "prisma/migrations/**/*", "db/migrations/**/*"],
-    {
-      cwd: workspaceRoot,
-      ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
-      onlyFiles: true,
-    },
+  const apiRoutes = await filterToRootFiles(
+    workspaceRoot,
+    await fg(
+      ["app/api/**/route.ts", "src/app/api/**/route.ts", "pages/api/**/*.{ts,js}"],
+      {
+        cwd: workspaceRoot,
+        followSymbolicLinks: false,
+        ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
+        onlyFiles: true,
+      },
+    ),
   );
 
-  const envExamples = await fg([".env.example", ".env*.example", "**/*.env.example"], {
-    cwd: workspaceRoot,
-    ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
-    onlyFiles: true,
-  });
-
-  const testFiles = await fg(
-    ["**/*.{test,spec}.{ts,tsx,js,jsx}", "tests/**/*.{ts,tsx,js,jsx}"],
-    {
+  const libraryFiles = await filterToRootFiles(
+    workspaceRoot,
+    await fg(["lib/**/*.{ts,tsx}", "src/lib/**/*.{ts,tsx}"], {
       cwd: workspaceRoot,
+      followSymbolicLinks: false,
       ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
       onlyFiles: true,
-    },
+    }),
+  );
+
+  const databaseMigrations = await filterToRootFiles(
+    workspaceRoot,
+    await fg(
+      ["supabase/migrations/**/*.sql", "prisma/migrations/**/*", "db/migrations/**/*"],
+      {
+        cwd: workspaceRoot,
+        followSymbolicLinks: false,
+        ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
+        onlyFiles: true,
+      },
+    ),
+  );
+
+  const envExamples = await filterToRootFiles(
+    workspaceRoot,
+    await fg([".env.example", ".env*.example", "**/*.env.example"], {
+      cwd: workspaceRoot,
+      followSymbolicLinks: false,
+      ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
+      onlyFiles: true,
+    }),
+  );
+
+  const testFiles = await filterToRootFiles(
+    workspaceRoot,
+    await fg(
+      ["**/*.{test,spec}.{ts,tsx,js,jsx}", "tests/**/*.{ts,tsx,js,jsx}"],
+      {
+        cwd: workspaceRoot,
+        followSymbolicLinks: false,
+        ignore: [...DEFAULT_IGNORE_PATTERNS, ...(await readIgnorePatterns(workspaceRoot))],
+        onlyFiles: true,
+      },
+    ),
   );
 
   const textScan = await filterSmallTextFiles(workspaceRoot, [
