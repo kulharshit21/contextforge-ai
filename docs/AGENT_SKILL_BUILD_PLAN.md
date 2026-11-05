@@ -1,7 +1,7 @@
 # ContextForge Memory Skill: development plan
 
 Maintainer: @kulharshit21
-Status: active; deliver work in verified increments. Do not announce public adoption, production readiness, or superiority over built-in compaction without evidence.
+Status: historical development plan with implementation milestones marked complete. This is not a certification of release readiness, external adoption, or benchmark validity. Current use and limitations are documented in [README.md](../README.md), [architecture](ARCHITECTURE.md) and [benchmark caveats](BENCHMARK_RESULTS.md).
 
 ## North star
 
