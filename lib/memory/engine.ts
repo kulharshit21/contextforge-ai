@@ -496,7 +496,7 @@ export async function saveCapsule(
   const timestamp = new Date();
   const datePrefix = timestamp.toISOString().slice(0, 10);
   const slug = slugify(task);
-  const filePath = path.join(getCapsulesDir(workspaceRoot), `${datePrefix}-${slug}.md`);
+  const filePath = path.join(getCapsulesDir(workspaceRoot), `${datePrefix}-${slug}-${randomUUID().slice(0, 8)}.md`);
   const markdown = matter.stringify(
     [
       `# Capsule: ${task}`,
