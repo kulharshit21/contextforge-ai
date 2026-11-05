@@ -248,3 +248,20 @@ test("recall --out refuses existing files and writes new files safely", (t) => {
   checkedCli(root, "recall", "--level", "handoff", "--out", fresh);
   assert.match(fs.readFileSync(fresh, "utf8"), /Keep storage local/);
 });
+
+
+test("repeated checkpoints are idempotent in the Markdown mirror", (t) => {
+  const root = temporaryProject(t);
+  checkedCli(root, "init");
+  checkedCli(root, "checkpoint", "Selected SQLite as the storage engine",
+    "--kind", "decision");
+  const markdownPath = path.join(root, ".contextforge", "DECISIONS.md");
+  const before = fs.readFileSync(markdownPath, "utf8");
+
+  const duplicate = checkedCli(root, "checkpoint", "Selected SQLite as the storage engine",
+    "--kind", "decision");
+  assert.match(duplicate, /Duplicate not saved/);
+  assert.equal(fs.readFileSync(markdownPath, "utf8"), before,
+    "Duplicate checkpoint should not mutate the Markdown mirror");
+  assert.match(checkedCli(root, "audit"), /integrity chain valid/);
+});
