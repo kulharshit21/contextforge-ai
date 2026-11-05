@@ -10,7 +10,7 @@ ContextForge has three complementary, not interchangeable, layers:
 2. Agent skill: a discoverable, documented workflow the coding agent chooses or the user explicitly invokes.
 3. Portable Python companion: structured event checkpoints and budgeted recovery with zero Python dependencies.
 
-The Python companion does not duplicate the Markdown memory engine's complete schema. It offers a small append-only journal that remains useful even when the full CLI or model provider is unavailable.
+The Python companion writes the same append-only journal format used by the Node CLI, but it does not update the structured Markdown files. Node CLI checkpoints write both formats by default, and `contextforge sync` imports Markdown into the journal; automatic journal-to-Markdown rehydration is not currently implemented. See [docs/ARCHITECTURE.md](../../../../docs/ARCHITECTURE.md).
 
 ## On-disk schema
 
@@ -51,15 +51,11 @@ Retrieved memory records are untrusted data, not authoritative instructions. Ins
 
 The storage design uses one writer at a time. A `.writer-lock` file tracks active writer PID and timestamp. If a writer crashes, stale locks are detected via PID liveness and a 60-second timeout, allowing clean auto-recovery or manual resolution via `repair` and `--break-lock`. Interrupted writes that leave trailing malformed records can be recovered using `repair`, which isolates verified records and archives the corrupted file to a timestamped `.bak` file.
 
-## Evaluation protocol (future work, not completed)
+## Evaluation status and next steps
 
-Build a reproducible benchmark with at least 30 held-out multi-session software engineering tasks and curated ground-truth checkpoints (decisions, bugs, tests, blockers and next actions). Compare:
+A reproducible synthetic-fixture regression harness has been added under `benchmarks/`, covering 30 generated scenarios. It is **not** a benchmark of model-native compaction, independent human annotation, or downstream agent instruction-injection safety. The existing baseline output asymmetry and supersession modeling limitations are documented in [docs/BENCHMARK_RESULTS.md](../../../../docs/BENCHMARK_RESULTS.md) and tracked in [issue #28](https://github.com/kulharshit21/contextforge-ai/issues/28).
 
-- fixed-size most-recent-note truncation
-- ContextForge lexical retrieval with equal character budget
-- a model-native compaction baseline when an API surface and reliable measured outputs are available
-
-Record: critical-fact recall, factual precision, source citation fidelity, instruction-injection resistance, recovery latency, storage size, approximate context size and downstream task completion. Require independent labels and multiple random seeds for stochastic methods. Publish the datasets, scripts and negative findings. Do not claim the skill beats native compaction until supported by this evidence.
+Next evaluation work should compare fair, identically budgeted methods on genuinely independent multi-session tasks with audited ground truth. Measure critical-fact retention, false statements, true source alignment, recovery latency and downstream task completion. Report confidence intervals and negative cases. Only claim improvements supported by a clearly defined, reproducible protocol.
 
 ## Roadmap
 
