@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -25,6 +26,7 @@ export interface SkillStatusResult {
     reference: boolean;
   };
   skillName?: string;
+  managedInstallation?: boolean;
   pythonRuntime?: {
     available: boolean;
     command: string;
@@ -35,6 +37,61 @@ export interface SkillStatusResult {
     eventsPath: string;
     exists: boolean;
   };
+}
+
+
+const INSTALL_MANIFEST = ".contextforge-install.json";
+const INSTALLED_FILES = ["SKILL.md", "scripts/contextforge_memory.py", "references/design.md"] as const;
+type InstallManifest = { version: 1; files: Record<string, string> };
+
+function assertNoSymlinks(input: string) {
+  let current = path.resolve(input);
+  for (;;) {
+    try {
+      if (fs.lstatSync(current).isSymbolicLink()) {
+        throw new Error("Refusing to operate through symlink: " + current);
+      }
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+}
+function fileHash(filename: string) {
+  return createHash("sha256").update(fs.readFileSync(filename)).digest("hex");
+}
+function assertManagedAndUnmodified(dir: string) {
+  const manifestPath = path.join(dir, INSTALL_MANIFEST);
+  assertNoSymlinks(manifestPath);
+  let manifest: InstallManifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as InstallManifest;
+  } catch {
+    throw new Error("Refusing to modify legacy/manual skill installation without a valid ContextForge manifest.");
+  }
+  if (manifest.version !== 1 || !manifest.files ||
+      JSON.stringify(Object.keys(manifest.files).sort()) !== JSON.stringify([...INSTALLED_FILES].sort())) {
+    throw new Error("Refusing to modify an unknown ContextForge installation manifest.");
+  }
+  for (const [location, names] of [
+    [dir, [INSTALL_MANIFEST, "SKILL.md", "scripts", "references"]],
+    [path.join(dir, "scripts"), ["contextforge_memory.py"]],
+    [path.join(dir, "references"), ["design.md"]],
+  ] as const) {
+    assertNoSymlinks(location);
+    if (JSON.stringify(fs.readdirSync(location).sort()) !== JSON.stringify([...names].sort())) {
+      throw new Error("Refusing to modify skill directory containing additional or unexpected files.");
+    }
+  }
+  for (const relative of INSTALLED_FILES) {
+    const filename = path.join(dir, relative);
+    assertNoSymlinks(filename);
+    if (!fs.statSync(filename).isFile() || fileHash(filename) !== manifest.files[relative]) {
+      throw new Error("Refusing to modify changed skill file: " + relative);
+    }
+  }
 }
 
 export function resolveSkillSourceDir(): string {
@@ -105,7 +162,7 @@ export async function checkSkillStatus(options: SkillCommandOptions): Promise<Sk
   const skillMdExists = await pathExists(skillMdPath);
   const scriptExists = await pathExists(scriptPath);
   const refExists = await pathExists(refPath);
-  const installed = skillMdExists && scriptExists;
+  const installed = skillMdExists && scriptExists && refExists;
 
   let skillName: string | undefined = undefined;
   if (skillMdExists) {
@@ -136,6 +193,7 @@ export async function checkSkillStatus(options: SkillCommandOptions): Promise<Sk
       reference: refExists,
     },
     skillName,
+    managedInstallation: await pathExists(path.join(destDir, INSTALL_MANIFEST)),
     pythonRuntime: python,
     journalStatus: {
       initialized: journalExists,
@@ -157,7 +215,8 @@ export async function runSkillStatusCommand(options: SkillCommandOptions) {
   console.log(`Scope:     ${status.scope === "global" ? "User-global (~/.agents/skills)" : "Project-local (.agents/skills)"}`);
   console.log(`Location:  ${status.location}`);
   console.log(`Agent:     ${status.agent}`);
-  console.log(`Installed: ${status.installed ? "Yes" : "No"}`);
+  console.log(`Installed: ${status.installed ? "Files present" : "No"}`);
+  console.log(`Managed:   ${status.managedInstallation ? "Manifest present" : "No manifest"}`);
   console.log(`Files:`);
   console.log(`  - SKILL.md:                      ${status.files.skillMd ? "present" : "missing"}`);
   console.log(`  - scripts/contextforge_memory.py: ${status.files.script ? "present" : "missing"}`);
@@ -175,7 +234,7 @@ export async function runSkillStatusCommand(options: SkillCommandOptions) {
     console.log("\nTo install the skill in this project, run:");
     console.log("  contextforge skill install");
   } else {
-    console.log("\nSkill is discoverable by compatible coding agents (Codex, Antigravity, Claude Code, Cursor).");
+    console.log("\nSkill files are present. Verify discovery in the target agent; filesystem presence alone does not guarantee activation.");
     console.log("Prompt your agent: 'Use the contextforge-memory skill to recall relevant project context.'");
   }
 }
@@ -183,68 +242,82 @@ export async function runSkillStatusCommand(options: SkillCommandOptions) {
 export async function runSkillInstallCommand(options: SkillCommandOptions) {
   const sourceDir = resolveSkillSourceDir();
   const destDir = resolveSkillDestDir(options);
-
-  const skillMdDest = path.join(destDir, "SKILL.md");
-  if ((await pathExists(skillMdDest)) && !options.force) {
-    console.error(`ContextForge skill is already installed at ${destDir}. Use --force to overwrite.`);
-    process.exitCode = 1;
-    return;
+  assertNoSymlinks(destDir);
+  if (path.resolve(sourceDir) === path.resolve(destDir)) {
+    throw new Error("Cannot install skill over its own source directory.");
   }
-
+  if (fs.existsSync(destDir)) {
+    if (!fs.statSync(destDir).isDirectory()) throw new Error("Skill destination is not a directory.");
+    if (fs.readdirSync(destDir).length > 0) {
+      if (!options.force) {
+        console.error("Skill already installed or directory contains files at " + destDir + ". Use --force for an unmodified ContextForge-managed installation.");
+        process.exitCode = 1;
+        return;
+      }
+      assertManagedAndUnmodified(destDir);
+    }
+  }
+  for (const relative of INSTALLED_FILES) {
+    const from = path.join(sourceDir, relative);
+    if (!fs.existsSync(from) || !fs.statSync(from).isFile()) {
+      throw new Error("Incomplete skill distribution: " + relative);
+    }
+    assertNoSymlinks(path.join(destDir, relative));
+  }
+  assertNoSymlinks(path.join(destDir, INSTALL_MANIFEST));
   await ensureDir(destDir);
-  await ensureDir(path.join(destDir, "scripts"));
-  await ensureDir(path.join(destDir, "references"));
-
-  fs.copyFileSync(path.join(sourceDir, "SKILL.md"), skillMdDest);
-  const scriptDest = path.join(destDir, "scripts", "contextforge_memory.py");
-  fs.copyFileSync(path.join(sourceDir, "scripts", "contextforge_memory.py"), scriptDest);
-
-  const refSrc = path.join(sourceDir, "references", "design.md");
-  if (fs.existsSync(refSrc)) {
-    fs.copyFileSync(refSrc, path.join(destDir, "references", "design.md"));
+  const hashes: Record<string, string> = {};
+  for (const relative of INSTALLED_FILES) {
+    const target = path.join(destDir, relative);
+    await ensureDir(path.dirname(target));
+    fs.copyFileSync(path.join(sourceDir, relative), target);
+    hashes[relative] = fileHash(target);
   }
-
+  const scriptDest = path.join(destDir, "scripts", "contextforge_memory.py");
   try {
     fs.chmodSync(scriptDest, 0o755);
   } catch {
     // Windows chmod may be a no-op
   }
+  fs.writeFileSync(path.join(destDir, INSTALL_MANIFEST), JSON.stringify({
+    version: 1, files: hashes
+  } satisfies InstallManifest, null, 2) + "\n", "utf8");
 
   console.log("=== ContextForge Agent Skill Installed ===");
-  console.log(`Location: ${destDir}`);
+  console.log("Location: " + destDir);
   console.log("Files copied:");
   console.log("  - SKILL.md (metadata and agent prompt instructions)");
   console.log("  - scripts/contextforge_memory.py (portable standard-library memory engine)");
   console.log("  - references/design.md (memory contract and schemas)");
   console.log("\nNext steps:");
-  console.log("  1. Ask your agent: \"Use the contextforge-memory skill to recall context for this task\"");
+  console.log('  1. Ask your agent: "Use the contextforge-memory skill to recall context for this task"');
   console.log("  2. Or run offline memory commands directly:");
-  console.log(`     python "${scriptDest}" --root . init`);
-  console.log(`     python "${scriptDest}" --root . recall --task "my task"`);
+  console.log('     python "' + scriptDest + '" --root . init');
+  console.log('     python "' + scriptDest + '" --root . recall --task "my task"');
+  console.log("  3. Verify actual skill discovery in your agent.");
 }
 
 export async function runSkillUninstallCommand(options: SkillCommandOptions) {
   const destDir = resolveSkillDestDir(options);
-
-  if (!(await pathExists(destDir))) {
-    console.log(`No skill installation found at ${destDir}`);
+  assertNoSymlinks(destDir);
+  if (!fs.existsSync(destDir)) {
+    console.log("No skill installation found at " + destDir);
     return;
   }
-
-  fs.rmSync(destDir, { recursive: true, force: true });
-
-  try {
-    const skillsDir = path.dirname(destDir);
-    if (fs.existsSync(skillsDir) && fs.readdirSync(skillsDir).length === 0) {
-      fs.rmdirSync(skillsDir);
-      const agentsDir = path.dirname(skillsDir);
-      if (fs.existsSync(agentsDir) && fs.readdirSync(agentsDir).length === 0) {
-        fs.rmdirSync(agentsDir);
-      }
-    }
-  } catch {
-    // Ignore cleanup errors on non-empty dirs
+  if (!fs.statSync(destDir).isDirectory()) {
+    throw new Error("Uninstall refused: target is not a directory.");
   }
-
-  console.log(`ContextForge Agent Skill uninstalled from ${destDir}`);
+  assertManagedAndUnmodified(destDir);
+  for (const relative of INSTALLED_FILES) fs.unlinkSync(path.join(destDir, relative));
+  fs.unlinkSync(path.join(destDir, INSTALL_MANIFEST));
+  fs.rmdirSync(path.join(destDir, "scripts"));
+  fs.rmdirSync(path.join(destDir, "references"));
+  fs.rmdirSync(destDir);
+  // Remove only empty parent directories, never siblings or project data.
+  const parent = path.dirname(destDir);
+  const outer = path.dirname(parent);
+  for (const dirname of [parent, outer]) {
+    if (fs.existsSync(dirname) && fs.readdirSync(dirname).length === 0) fs.rmdirSync(dirname);
+  }
+  console.log("ContextForge Agent Skill uninstalled from " + destDir);
 }
