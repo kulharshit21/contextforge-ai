@@ -191,10 +191,10 @@ function buildIndexMarkdown(projectName: string) {
     "",
     "## Commands",
     "",
-    "- `npx contextforge remember \"...\"` to append durable memory.",
-    "- `npx contextforge scan` to refresh repo scan facts.",
-    "- `npx contextforge capsule \"task\"` to generate a task-specific capsule.",
-    "- `npx contextforge doctor` to detect memory drift.",
+    "- `contextforge remember \"...\"` to append durable memory.",
+    "- `contextforge scan` to refresh repo scan facts.",
+    "- `contextforge capsule \"task\"` to generate a task-specific capsule.",
+    "- `contextforge doctor` to detect memory drift.",
   ].join("\n");
 }
 
