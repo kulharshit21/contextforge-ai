@@ -80,6 +80,17 @@ class AgentMemoryTests(unittest.TestCase):
             self.invoke("save", "--kind", "fact", "--text", value, status=2)
         self.assertFalse(self.log.exists())
 
+    def test_stdin_support_and_evidence_source_rejection(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--root", str(self.root),
+             "save", "--kind", "next", "--stdin"],
+            input="Complete the offline documentation test", capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Complete the offline", self.invoke("recall", "--task", "documentation").stdout)
+        self.invoke("save", "--kind", "test", "--text", "Verified CI",
+                    "--source", "api_key=supersecretlongvalue", status=2)
+
     def test_nonexistent_project_fails_safely(self):
         missing = self.root / "not-a-folder"
         result = subprocess.run([sys.executable, str(SCRIPT), "--root", str(missing), "init"],
