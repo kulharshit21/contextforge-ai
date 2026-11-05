@@ -207,3 +207,44 @@ test("Node CLI and Python skill script are 100% hash-chain interoperable", (t) =
   assert.equal(pyRecall.status, 0);
   assert.match(pyRecall.stdout, /Written by Node CLI/);
 });
+
+
+test("recall respects JSON and Markdown budgets including long task headers", (t) => {
+  const root = temporaryProject(t);
+  checkedCli(root, "init");
+  for (let i = 0; i < 8; i++) {
+    checkedCli(root, "checkpoint", "Decision " + i + " for durable deterministic memory " + "context ".repeat(9),
+      "--kind", "decision", "--source", "docs/architecture.md");
+  }
+
+  const json = checkedCli(root, "recall", "deterministic memory", "--format", "json",
+    "--budget-chars", "500");
+  assert.ok(json.length <= 500, "JSON output exceeded its character budget");
+  assert.ok(Array.isArray(JSON.parse(json)), "JSON output is not parseable");
+
+  const md = checkedCli(root, "recall", "deterministic memory", "--format", "markdown",
+    "--budget-chars", "500");
+  assert.ok(md.length <= 500, "Markdown output exceeded its character budget");
+
+  const invalidBudget = runCli(root, "recall", "--budget-chars", "not-a-number");
+  assert.notEqual(invalidBudget.status, 0, "NaN budget must be rejected");
+
+  const impossibleHeader = runCli(root, "recall", "x".repeat(700), "--budget-chars", "500");
+  assert.notEqual(impossibleHeader.status, 0, "Oversized Markdown header must not violate limit");
+});
+
+test("recall --out refuses existing files and writes new files safely", (t) => {
+  const root = temporaryProject(t);
+  checkedCli(root, "init");
+  checkedCli(root, "checkpoint", "Keep storage local", "--kind", "decision");
+  const output = path.join(root, "AGENTS.md");
+  fs.writeFileSync(output, "# Do not overwrite this file\n");
+  const blocked = runCli(root, "recall", "--out", output);
+  assert.notEqual(blocked.status, 0);
+  assert.match(blocked.stderr, /Refusing to overwrite existing output file/);
+  assert.equal(fs.readFileSync(output, "utf8"), "# Do not overwrite this file\n");
+
+  const fresh = path.join(root, "session-handoff.md");
+  checkedCli(root, "recall", "--level", "handoff", "--out", fresh);
+  assert.match(fs.readFileSync(fresh, "utf8"), /Keep storage local/);
+});
