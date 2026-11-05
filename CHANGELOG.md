@@ -4,6 +4,12 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Upgraded Next.js to 16.4.5 and resolved GHSA-8h8q-6873-q5fj (issue #32):
+  - Upgraded `next` to `^16.4.5` and `eslint-config-next` to `^16.4.5`, resolving high-severity Server Components DoS (GHSA-8h8q-6873-q5fj), cache poisoning, SSRF, and upstream `sharp` vulnerabilities.
+  - Added package override for `js-yaml` (`^3.15.2`), resolving quadratic-complexity CPU consumption DoS in `gray-matter`.
+  - Reduced `npm audit --omit=dev` vulnerabilities to 4 total (0 critical, 0 direct production vulnerabilities).
+  - Updated `docs/DEPENDENCY_AUDIT.md`, `SECURITY.md`, and `README.md` to document the upgrade and hosted/local runtime security boundaries.
+
 ### Documentation and reliability review (November 2026)
 
 - Made README.md a concise project front door, with a separate source-install guide and documentation index.
