@@ -30,7 +30,9 @@ import {
 } from "@/lib/memory/engine";
 import { generateExports } from "@/lib/memory/export";
 import {
+  ExtractedMemorySchema,
   ProjectRecordSchema,
+  ProjectSettingsSchema,
   type Capsule,
   type MemoryFileKey,
   type ProjectRecord,
@@ -357,19 +359,25 @@ export async function createProject(input: {
   localPathHint?: string;
 }) {
   assertLocalWorkspaceWritesAvailable();
+  if (typeof input.name !== "string" || !input.name.trim() || input.name.length > 100) {
+    throw new Error("A project name between 1 and 100 characters is required.");
+  }
   const projects = await getStoredProjects();
-  const slug = slugify(input.name);
+  const slug = slugify(input.name.trim());
+  if (projects.some((existing) => existing.id === slug)) {
+    throw new Error("A project with that name already exists. Choose a different name.");
+  }
   const workspaceRoot = path.join(process.cwd(), "workspaces", slug);
   await initWorkspace(workspaceRoot, input.name);
 
   const project: ProjectRecord = {
     id: slug,
-    name: input.name,
-    description: input.description,
+    name: input.name.trim(),
+    description: typeof input.description === "string" ? input.description.trim() : "",
     repoUrl: input.repoUrl ?? "",
     localPathHint: input.localPathHint ?? "",
     workspaceRoot,
-    stack: ["Next.js", "TypeScript", "Supabase"],
+    stack: [],
     editable: true,
     createdAt: isoNow(),
     updatedAt: isoNow(),
@@ -400,6 +408,9 @@ export async function updateProjectSettings(
   }
 
   const projects = await getStoredProjects();
+  if (!projects.some((project) => project.id === projectId)) {
+    throw new Error("Project not found.");
+  }
   const nextProjects = projects.map((project) => {
     if (project.id !== projectId) {
       return project;
@@ -410,10 +421,10 @@ export async function updateProjectSettings(
       name: settings.name ?? project.name,
       description: settings.description ?? project.description,
       updatedAt: isoNow(),
-      settings: {
+      settings: ProjectSettingsSchema.parse({
         ...project.settings,
         ...settings,
-      },
+      }),
     };
   });
 
@@ -508,9 +519,10 @@ export async function ingestProjectChat(
   }
 
   if (payload.extracted) {
-    const parsed = payload.extracted;
+    const parsed = ExtractedMemorySchema.parse(payload.extracted);
     if (payload.persist) {
-      await mergeExtractedMemory(project.workspaceRoot, parsed as never, "chat-ingest");
+      assertLocalWorkspaceWritesAvailable();
+      await mergeExtractedMemory(project.workspaceRoot, parsed, "chat-ingest");
     }
     return parsed;
   }
@@ -522,6 +534,7 @@ export async function ingestProjectChat(
   );
 
   if (payload.persist) {
+    assertLocalWorkspaceWritesAvailable();
     await mergeExtractedMemory(project.workspaceRoot, extraction.extracted, "chat-ingest");
   }
 

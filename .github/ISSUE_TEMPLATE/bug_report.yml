@@ -1,0 +1,43 @@
+name: Bug report
+description: Report a reproducible defect (no credentials or sensitive data)
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: "Search existing issues before filing. For security vulnerabilities, use SECURITY.md and private reporting."
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe observed behavior and impact.
+      placeholder: Running contextforge scan reported...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Commands and non-sensitive sample inputs that reproduce the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit SHA
+      placeholder: main @ SHA...
+  - type: input
+    id: environment
+    attributes:
+      label: OS and Node version
+      placeholder: Windows 11, Node 24
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs (optional)
+      description: Remove tokens, file contents, private paths and personal data before sharing.

@@ -28,4 +28,5 @@ if (result.error) {
   process.exit(1);
 }
 
-process.exit(result.status ?? 0);
+// A child terminated by a signal has a null status: never report success.
+process.exit(result.status ?? 1);
