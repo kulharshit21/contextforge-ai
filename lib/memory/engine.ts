@@ -363,7 +363,12 @@ function inferFileKeyFromText(text: string): MemoryFileKey {
     return "CODING_RULES";
   }
 
-  if (/(route|endpoint|payload|response|table|schema|api)/.test(lowered)) {
+  // A deliberate decision stays a decision even when it mentions an API.
+  if (/\b(decision|decided|tradeoff|alternative)\b/.test(lowered)) {
+    return "DECISIONS";
+  }
+
+  if (/\b(route|endpoint|payload|response|table|schema|api|apis)\b/.test(lowered)) {
     return "API_CONTRACTS";
   }
 
@@ -371,9 +376,6 @@ function inferFileKeyFromText(text: string): MemoryFileKey {
     return "ENV_AND_SETUP";
   }
 
-  if (/(decision|decided|because|tradeoff|alternative)/.test(lowered)) {
-    return "DECISIONS";
-  }
 
   if (/(task|next step|blocker|todo|currently|active)/.test(lowered)) {
     return "CURRENT_TASKS";
