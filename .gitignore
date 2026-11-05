@@ -59,3 +59,6 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .venv/
+
+# Reproducible benchmark output (generated on each run)
+/benchmarks/results.json
