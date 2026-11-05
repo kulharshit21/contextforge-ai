@@ -4,6 +4,12 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Added Agent Skill lifecycle commands (`contextforge skill status`, `install`, `uninstall`):
+  - `status`: inspects whether `contextforge-memory` is installed project-locally or globally, verifies presence of `SKILL.md`, Python companion script, and design references, and detects Python 3 runtime availability.
+  - `install`: installs the portable skill into `.agents/skills/contextforge-memory` (or user-global `~/.agents/skills/`), enforcing overwrite protection unless `--force` is supplied.
+  - `uninstall`: removes the installed skill and cleans up empty parent directories up to `.agents/`.
+  - Added full automated integration tests across local install, overwrite guards, direct script invocation in target project, and clean uninstallation in `tests/cli.integration.test.cjs` and `tests/tarball_install.test.cjs`.
+
 - Upgraded Next.js to 16.4.5 and resolved GHSA-8h8q-6873-q5fj (issue #32):
   - Upgraded `next` to `^16.4.5` and `eslint-config-next` to `^16.4.5`, resolving high-severity Server Components DoS (GHSA-8h8q-6873-q5fj), cache poisoning, SSRF, and upstream `sharp` vulnerabilities.
   - Added package override for `js-yaml` (`^3.15.2`), resolving quadratic-complexity CPU consumption DoS in `gray-matter`.
