@@ -9,6 +9,38 @@
 
 **Project status:** early-stage open-source MVP. The repository contains a local CLI, dashboard, mock/offline functionality, and CI checks. It is **not yet published to npm**. Some features described in the roadmap are proposals, not shipped features.
 
+## Agent skill: local memory checkpoints and context recovery
+
+**New experimental capability:** a portable, open-format agent skill at
+[.agents/skills/contextforge-memory/SKILL.md](.agents/skills/contextforge-memory/SKILL.md).
+
+It works as an optional, offline companion to the existing CLI. An AI coding agent can use this skill to:
+
+- record compact **decisions, test outcomes, bugs, blockers, and next actions** with evidence references;
+- recover the most relevant records for a new task within an explicit context budget;
+- preserve corrections without silently changing earlier history;
+- verify the local append-only journal for accidental corruption.
+
+It does **not** intercept or replace built-in AI compaction, autonomously monitor all chats, or claim better benchmark performance than native model memory. Its retrieval is deterministic and keyword-based; agent-written notes still need verification.
+
+### Use in a repository (Codex or compatible Agent Skills host)
+
+1. Clone ContextForge, then copy its .agents/skills/contextforge-memory folder into **your target repository's** .agents/skills folder. Alternatively, copy it into your user's ~/.agents/skills folder. Consult the agent's skill discovery documentation.
+2. Open the target repository with a compatible agent, and request the **contextforge-memory** skill explicitly if the agent does not select it automatically.
+3. The skill uses Python 3.10+ with no third-party Python packages or external API calls.
+
+~~~bash
+python .agents/skills/contextforge-memory/scripts/contextforge_memory.py --root . init
+python .agents/skills/contextforge-memory/scripts/contextforge_memory.py --root . save --kind decision --text "Use local Markdown as the source of truth" --source "docs/ARCHITECTURE.md"
+python .agents/skills/contextforge-memory/scripts/contextforge_memory.py --root . save --kind next --text "Add a regression test for Windows CLI"
+python .agents/skills/contextforge-memory/scripts/contextforge_memory.py --root . recall --task "Windows CLI testing" --budget-chars 2500
+python .agents/skills/contextforge-memory/scripts/contextforge_memory.py --root . audit
+~~~
+
+Run those paths from the target repository when it contains the copied skill. Use a suitable absolute skill script path if installed at user scope. For private notes, prefer piping reviewed text to the save command using --stdin to avoid command-line history. **Never send secrets or confidential data to the memory log.** Local notes are ignored under .contextforge/ by default.
+
+Read [design and limitations](.agents/skills/contextforge-memory/references/design.md). The existing Node/TypeScript CLI and web dashboard continue to work independently.
+
 ## What works today
 
 - Initialize ten structured Markdown memory files inside any working directory.
