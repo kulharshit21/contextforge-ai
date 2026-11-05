@@ -93,9 +93,11 @@ def lock_and_append(path: Path, kind: str, text: str, source: str, tags: list[st
         old = read_events(path)
         if supersedes and not any(e["id"] == supersedes for e in old):
             raise ValueError("Cannot supersede a missing record: " + supersedes)
-        if any(e["kind"] == kind and e["text"] == text and e.get("source") == source
-               and e.get("supersedes", "") == supersedes for e in old):
-            return old[-1], False
+        duplicate = next((e for e in old if e["kind"] == kind and e["text"] == text
+                          and e.get("source") == source
+                          and e.get("supersedes", "") == supersedes), None)
+        if duplicate is not None:
+            return duplicate, False
         event = {
             "v": VERSION, "id": uuid4().hex[:12],
             "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -172,7 +174,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("init", help="Create local memory storage")
     save = sub.add_parser("save", help="Append one durable memory record")
     save.add_argument("--kind", choices=KINDS, required=True)
-    save.add_argument("--text", required=True, help="Short, verified note (avoid command-line secrets)")
+    note_input = save.add_mutually_exclusive_group(required=True)
+    note_input.add_argument("--text", help="Short, verified note (visible in shell history)")
+    note_input.add_argument("--stdin", action="store_true", help="Read a short note from standard input")
     save.add_argument("--source", default="", help="Optional human-verifiable file or evidence reference")
     save.add_argument("--tags", default="", help="Optional comma-separated keywords")
     save.add_argument("--supersedes", default="", help="Previous record ID being corrected")
@@ -188,7 +192,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ContextForge memory initialized: {directory}")
             return 0
         if args.command == "save":
-            refuse_sensitive(args.text)
+            note = sys.stdin.read(4001) if args.stdin else args.text
+            refuse_sensitive(note)
+            refuse_sensitive(args.source or "(no evidence source)")
             if len(args.source) > 300:
                 raise ValueError("Source reference too long")
             if args.supersedes and not VALID_ID.fullmatch(args.supersedes):
@@ -196,7 +202,7 @@ def main(argv: list[str] | None = None) -> int:
             tags = [tag.strip().lower() for tag in args.tags.split(",") if tag.strip()]
             if len(tags) > 20 or any(len(tag) > 50 for tag in tags):
                 raise ValueError("Too many or oversized tags")
-            record, created = lock_and_append(directory, args.kind, args.text.strip(),
+            record, created = lock_and_append(directory, args.kind, note.strip(),
                                                args.source.strip(), tags, args.supersedes)
             print(("Saved" if created else "Duplicate not saved") + ": " + record["id"])
             return 0
