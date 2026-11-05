@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { getContextForgeDir, initWorkspace } from "@/lib/memory/engine";
+import { getContextForgeDir, initWorkspace } from "../../lib/memory/engine";
 
 export async function runInitCommand(workspaceRoot = process.cwd()) {
   await initWorkspace(workspaceRoot, path.basename(workspaceRoot));

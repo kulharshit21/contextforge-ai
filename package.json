@@ -80,5 +80,15 @@
   "bugs": {
     "url": "https://github.com/kulharshit21/contextforge-ai/issues"
   },
-  "homepage": "https://github.com/kulharshit21/contextforge-ai#readme"
+  "homepage": "https://github.com/kulharshit21/contextforge-ai#readme",
+  "files": [
+    "bin",
+    "cli",
+    "lib",
+    ".agents",
+    "tsconfig.json",
+    "README.md",
+    "LICENSE",
+    "AGENTS.md"
+  ]
 }

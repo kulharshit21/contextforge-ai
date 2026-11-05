@@ -1,4 +1,4 @@
-import { estimateSavings } from "@/lib/utils/tokens";
+import { estimateSavings } from "../utils/tokens";
 
 import type { Capsule, MemoryFile, MemoryItem, RepoScan } from "./schemas";
 

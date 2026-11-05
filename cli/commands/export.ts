@@ -1,14 +1,14 @@
 import path from "node:path";
 import { writeFile } from "node:fs/promises";
 
-import { calculateMemoryHealthScore } from "@/lib/memory/drift";
-import { generateExports } from "@/lib/memory/export";
+import { calculateMemoryHealthScore } from "../../lib/memory/drift";
+import { generateExports } from "../../lib/memory/export";
 import {
   listSavedCapsules,
   loadMemoryFiles,
   readRepoScan,
-} from "@/lib/memory/engine";
-import { ensureDir, pathExists } from "@/lib/utils/fs";
+} from "../../lib/memory/engine";
+import { ensureDir, pathExists } from "../../lib/utils/fs";
 
 export async function runExportCommand(
   workspaceRoot = process.cwd(),

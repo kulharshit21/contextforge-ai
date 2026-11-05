@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
-import { recallContext } from "@/lib/memory/engine";
-import { type ContextLevel, CONTEXT_LEVELS } from "@/lib/memory/schemas";
+import { recallContext } from "../../lib/memory/engine";
+import { type ContextLevel, CONTEXT_LEVELS } from "../../lib/memory/schemas";
 
 export type RecallCommandOptions = {
   task?: string;

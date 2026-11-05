@@ -1,4 +1,4 @@
-import { formatDateTime } from "@/lib/utils/date";
+import { formatDateTime } from "../utils/date";
 
 import type { Capsule, DriftIssue, MemoryFile, RepoScan } from "./schemas";
 

@@ -4,6 +4,13 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Standalone npm CLI packaging and release preparation (issue #14):
+  - Configured explicit `"files"` manifest in `package.json`, reducing packed tarball from 143 files (689 kB unpacked) down to 51 files (197 kB unpacked) and strictly excluding private Next.js app pages, UI components, and benchmark fixtures.
+  - Refactored `cli/` and `lib/` to use standard relative module imports, resolving runtime module resolution failures when installed inside `node_modules`.
+  - Added automated integration test `tests/tarball_install.test.cjs` verifying tarball packaging, isolated clean-directory installation with `--omit=dev`, and CLI execution across `init`, `checkpoint`, `remember`, `recall`, `audit`, `scan`, `doctor`, `capsule`, and `export`.
+  - Added `.github/workflows/publish.yml` with manual `workflow_dispatch` trigger, dry-run by default, and `release-approval` environment protection.
+  - Updated `docs/RELEASE_CHECKLIST.md` with release criteria and verification status.
+
 - Cross-platform quickstart verification on Windows 11 and macOS (issue #12):
   - Executed end-to-end disposable project walkthrough on Windows 11 (PowerShell, Node 24) verifying `init`, `checkpoint`, `remember`, `recall`, `audit`, `scan`, `doctor`, `capsule`, and `export`.
   - Confirmed deterministic output paths, expected exit codes, and overwrite protection behavior for `AGENTS.md`.

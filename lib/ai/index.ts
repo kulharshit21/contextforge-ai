@@ -1,5 +1,5 @@
-import { createDeterministicCapsule } from "@/lib/memory/capsule";
-import { detectMemoryDrift } from "@/lib/memory/drift";
+import { createDeterministicCapsule } from "../memory/capsule";
+import { detectMemoryDrift } from "../memory/drift";
 import {
   CapsuleSchema,
   DriftIssueSchema,
@@ -7,17 +7,17 @@ import {
   type ExtractedMemory,
   type MemoryFile,
   type RepoScan,
-} from "@/lib/memory/schemas";
-import { buildCapsulePrompt } from "@/lib/prompts/capsule";
-import { DRIFT_DETECTION_PROMPT } from "@/lib/prompts/drift";
-import { buildChatExtractionPrompt } from "@/lib/prompts/extract";
+} from "../memory/schemas";
+import { buildCapsulePrompt } from "../prompts/capsule";
+import { DRIFT_DETECTION_PROMPT } from "../prompts/drift";
+import { buildChatExtractionPrompt } from "../prompts/extract";
 import {
   getPreferredProvider,
   getPrivacyMode,
   isCloudProvider,
   type PrivacyMode,
   type ProviderName,
-} from "@/lib/utils/env";
+} from "../utils/env";
 
 import { GeminiProvider } from "./providers/gemini";
 import { MockProvider, type AIProvider } from "./providers/mock";

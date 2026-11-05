@@ -1,4 +1,4 @@
-import { remember } from "@/lib/memory/engine";
+import { remember } from "../../lib/memory/engine";
 
 export async function runRememberCommand(text: string, workspaceRoot = process.cwd()) {
   const item = await remember(workspaceRoot, text);

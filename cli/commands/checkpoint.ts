@@ -1,5 +1,5 @@
-import { checkpointMemory } from "@/lib/memory/engine";
-import { type JournalEventKind, JOURNAL_EVENT_KINDS } from "@/lib/memory/schemas";
+import { checkpointMemory } from "../../lib/memory/engine";
+import { type JournalEventKind, JOURNAL_EVENT_KINDS } from "../../lib/memory/schemas";
 
 export type CheckpointCommandOptions = {
   kind?: string;

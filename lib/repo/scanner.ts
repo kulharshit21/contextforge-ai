@@ -4,10 +4,10 @@ import path from "node:path";
 import fg from "fast-glob";
 import { simpleGit } from "simple-git";
 
-import { isoNow } from "@/lib/utils/date";
-import { pathExists, readJsonIfExists, readTextIfExists } from "@/lib/utils/fs";
+import { isoNow } from "../utils/date";
+import { pathExists, readJsonIfExists, readTextIfExists } from "../utils/fs";
 
-import { RepoScanSchema, type RepoScan } from "@/lib/memory/schemas";
+import { RepoScanSchema, type RepoScan } from "../memory/schemas";
 
 const DEFAULT_IGNORE_PATTERNS = [
   "**/node_modules/**",

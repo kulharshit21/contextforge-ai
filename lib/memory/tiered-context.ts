@@ -1,5 +1,5 @@
 import path from "node:path";
-import { pathExists } from "@/lib/utils/fs";
+import { pathExists } from "../utils/fs";
 import { type ContextLevel, type JournalEvent } from "./schemas";
 import { getActiveEvents } from "./journal";
 

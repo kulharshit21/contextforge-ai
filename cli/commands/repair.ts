@@ -1,4 +1,4 @@
-import { repairAllMemory } from "@/lib/memory/engine";
+import { repairAllMemory } from "../../lib/memory/engine";
 
 export type RepairCommandOptions = {
   breakLock?: boolean;

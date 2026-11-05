@@ -1,6 +1,6 @@
-import { createDeterministicCapsule } from "@/lib/memory/capsule";
-import { calculateMemoryHealthScore } from "@/lib/memory/drift";
-import { MEMORY_FILE_DEFINITIONS } from "@/lib/memory/engine";
+import { createDeterministicCapsule } from "../memory/capsule";
+import { calculateMemoryHealthScore } from "../memory/drift";
+import { MEMORY_FILE_DEFINITIONS } from "../memory/engine";
 import type {
   DriftIssue,
   MemoryFile,
@@ -8,7 +8,7 @@ import type {
   MemoryItem,
   ProjectRecord,
   RepoScan,
-} from "@/lib/memory/schemas";
+} from "../memory/schemas";
 
 const DEMO_DATE = "2026-05-01T10:15:00.000Z";
 export const DEMO_PROJECT_ID = "demo-healthcare";

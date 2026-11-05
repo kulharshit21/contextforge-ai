@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { analyzeMemoryDrift, extractMemoryFromChat, generateCapsuleFromMemory } from "@/lib/ai";
+import { analyzeMemoryDrift, extractMemoryFromChat, generateCapsuleFromMemory } from "../ai";
 import {
   DEMO_PROJECT_ID,
   demoCapsule,
@@ -10,9 +10,9 @@ import {
   demoProjectHealthScore,
   demoProjectRecord,
   demoRepoScan,
-} from "@/lib/demo/data";
-import { createDeterministicCapsule, renderCapsuleMarkdown } from "@/lib/memory/capsule";
-import { calculateMemoryHealthScore } from "@/lib/memory/drift";
+} from "../demo/data";
+import { createDeterministicCapsule, renderCapsuleMarkdown } from "../memory/capsule";
+import { calculateMemoryHealthScore } from "../memory/drift";
 import {
   appendMemoryItem,
   getConfigPath,
@@ -27,8 +27,8 @@ import {
   saveExport,
   saveMemoryFileRaw,
   writeRepoScan,
-} from "@/lib/memory/engine";
-import { generateExports } from "@/lib/memory/export";
+} from "../memory/engine";
+import { generateExports } from "../memory/export";
 import {
   ExtractedMemorySchema,
   ProjectRecordSchema,
@@ -37,12 +37,12 @@ import {
   type MemoryFileKey,
   type ProjectRecord,
   type ProjectSettings,
-} from "@/lib/memory/schemas";
-import { scanRepository } from "@/lib/repo/scanner";
-import { isoNow } from "@/lib/utils/date";
-import { canUseLocalWorkspaceFilesystem, isDemoMode, isVercel } from "@/lib/utils/env";
-import { ensureDir, pathExists, readJsonIfExists, writeJsonPretty } from "@/lib/utils/fs";
-import { slugify } from "@/lib/utils/slug";
+} from "../memory/schemas";
+import { scanRepository } from "../repo/scanner";
+import { isoNow } from "../utils/date";
+import { canUseLocalWorkspaceFilesystem, isDemoMode, isVercel } from "../utils/env";
+import { ensureDir, pathExists, readJsonIfExists, writeJsonPretty } from "../utils/fs";
+import { slugify } from "../utils/slug";
 
 const WORKSPACE_INDEX_PATH = path.join(process.cwd(), "workspaces", "projects.json");
 const STARTER_PROJECT_ID = "starter-local";

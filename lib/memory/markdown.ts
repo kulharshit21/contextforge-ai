@@ -1,6 +1,6 @@
 import matter from "gray-matter";
 
-import { formatDateTime } from "@/lib/utils/date";
+import { formatDateTime } from "../utils/date";
 
 import { MemoryFileSchema, type MemoryFile, type MemoryItem } from "./schemas";
 
