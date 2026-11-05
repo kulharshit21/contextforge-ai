@@ -96,11 +96,11 @@ export async function buildTieredContext(
   options: TieredContextOptions = {},
 ): Promise<{ output: string; selectedCount: number; totalActive: number; level: ContextLevel }> {
   const level = options.level || "capsule";
-  const budget = options.budgetChars || DEFAULT_BUDGETS[level];
+  const budget = options.budgetChars ?? DEFAULT_BUDGETS[level];
   const task = (options.task || "").trim();
   const format = options.format || "markdown";
 
-  if (budget < 500 || budget > 100000) {
+  if (!Number.isInteger(budget) || budget < 500 || budget > 100000) {
     throw new Error("Character budget must be between 500 and 100000");
   }
 
@@ -109,15 +109,19 @@ export async function buildTieredContext(
 
   if (format === "json") {
     const selected: ScoredRecord[] = [];
-    let currentLen = 2; // "[]"
+    let currentLen = 2; // []
     for (const record of ranked) {
-      const itemJson = JSON.stringify(record);
-      if (currentLen + itemJson.length + 1 > budget) break;
+      const itemLength = JSON.stringify(record).length;
+      const separatorLength = selected.length > 0 ? 1 : 0;
+      if (currentLen + separatorLength + itemLength > budget) {
+        continue;
+      }
       selected.push(record);
-      currentLen += itemJson.length + 1;
+      currentLen += separatorLength + itemLength;
     }
+    // Keep the exact serialized representation within the specified budget.
     return {
-      output: JSON.stringify(selected, null, 2),
+      output: JSON.stringify(selected),
       selectedCount: selected.length,
       totalActive: active.length,
       level,
@@ -151,6 +155,10 @@ export async function buildTieredContext(
       "",
       "## Evidence Records",
     ].join("\n") + "\n";
+  }
+
+  if (header.length > budget) {
+    throw new Error("Task description is too long for the requested context budget");
   }
 
   let output = header;
