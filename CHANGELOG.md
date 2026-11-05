@@ -4,6 +4,10 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Updated development build plan and maintainer documentation:
+  - Documented completion of Milestones D, E, and F in `docs/AGENT_SKILL_BUILD_PLAN.md` with links to PRs #19, #20, #21, #22, #23, #24, #25 and closed issues #2, #12, #13, #14, #16, #17.
+  - Documented main branch ruleset and protection policy in `CONTRIBUTING.md` and `docs/MAINTAINER_RUNBOOK.md`.
+
 - Standalone npm CLI packaging and release preparation (issue #14):
   - Configured explicit `"files"` manifest in `package.json`, reducing packed tarball from 143 files (689 kB unpacked) down to 51 files (197 kB unpacked) and strictly excluding private Next.js app pages, UI components, and benchmark fixtures.
   - Refactored `cli/` and `lib/` to use standard relative module imports, resolving runtime module resolution failures when installed inside `node_modules`.
