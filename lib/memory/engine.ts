@@ -533,15 +533,25 @@ export async function checkpointMemory(
 
   let item: MemoryItem | null = null;
   if (!input.noSync) {
-    item = await appendMemoryItem(workspaceRoot, fileKey, {
-      type: kind,
-      title: buildItemTitle(input.text),
-      content: input.text,
-      source: source || "cli:checkpoint",
-      confidence: 0.9,
-      related_files: source.startsWith("git:") ? [] : (source ? [source] : []),
-      tags: input.tags || [kind],
-    });
+    // A duplicate journal event must not create another copy in Markdown.
+    // However, a journal-only Python checkpoint should still be mirrored
+    // when the same note is checkpointed through the Node CLI.
+    const memoryFile = await loadMemoryFile(workspaceRoot, fileKey);
+    const isMirrored = memoryFile.items.some(
+      (existing) =>
+        existing.type === kind && existing.content.trim() === event.text.trim(),
+    );
+    if (!isMirrored) {
+      item = await appendMemoryItem(workspaceRoot, fileKey, {
+        type: kind,
+        title: buildItemTitle(input.text),
+        content: input.text,
+        source: source || "cli:checkpoint",
+        confidence: 0.9,
+        related_files: source.startsWith("git:") ? [] : (source ? [source] : []),
+        tags: input.tags || [kind],
+      });
+    }
   }
 
   return { event, item, fileKey, created };
