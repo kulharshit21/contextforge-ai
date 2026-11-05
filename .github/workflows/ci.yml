@@ -51,3 +51,20 @@ jobs:
           node "$GITHUB_WORKSPACE/bin/contextforge.js" export --all
           node "$GITHUB_WORKSPACE/bin/contextforge.js" doctor
           test -f .contextforge/repo-scan.json
+
+  memory-skill:
+    name: Agent memory skill
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test offline memory skill
+        run: python -m unittest discover -s tests -p "test_agent_memory.py" -v
