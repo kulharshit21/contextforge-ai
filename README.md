@@ -46,7 +46,7 @@ contextforge export --all
 contextforge stats
 ~~~
 
-On Windows, replace the example directory with the path to your target project in PowerShell. The command runs in the directory from which you invoke it and creates local files under that project's .contextforge/ folder. Generated agent instruction files can overwrite files with the same names, so **commit or back up existing files before running export**.
+On Windows, replace the example directory with the path to your target project in PowerShell. The command runs in the directory from which you invoke it and creates local files under that project's .contextforge/ folder. Export refuses to overwrite existing instruction files by default. **Review and back up files before passing --force**.
 
 **Why not npx?** This package is currently marked private and is not published. Do not use the unverified command npx contextforge from the public npm registry. Until an audited package release is published, use npm link or run node /path/to/contextforge-ai/bin/contextforge.js from your target project.
 
@@ -72,7 +72,7 @@ With no cloud credentials, you can explore the seeded demo and local workspace. 
 | contextforge scan | Refresh repository metadata |
 | contextforge capsule "task" | Save a task-specific context capsule |
 | contextforge doctor | Report likely inconsistencies or drift |
-| contextforge export --all | Generate agent instruction files |
+| contextforge export --all | Generate agent instructions without overwriting existing files; --force allows intentional replacement |
 | contextforge stats | Inspect local workspace summary |
 | contextforge ui | Show dashboard startup steps |
 
