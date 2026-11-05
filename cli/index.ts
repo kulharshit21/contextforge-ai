@@ -13,6 +13,12 @@ import { runRecallCommand, type RecallCommandOptions } from "./commands/recall";
 import { runRememberCommand } from "./commands/remember";
 import { runRepairCommand, type RepairCommandOptions } from "./commands/repair";
 import { runScanCommand } from "./commands/scan";
+import {
+  runSkillInstallCommand,
+  runSkillStatusCommand,
+  runSkillUninstallCommand,
+  type SkillCommandOptions,
+} from "./commands/skill";
 import { runStatsCommand } from "./commands/stats";
 import { runSyncCommand } from "./commands/sync";
 import { runUiCommand } from "./commands/ui";
@@ -118,6 +124,42 @@ program.command("stats").description("Show ContextForge workspace stats").action
 program.command("ui").description("Print dashboard startup instructions").action(() => {
   return runUiCommand();
 });
+
+const skillCommand = program
+  .command("skill")
+  .description("Manage and install the portable Agent Skill across coding agents");
+
+skillCommand
+  .command("status")
+  .description("Check if the contextforge-memory skill is installed and discoverable")
+  .option("--target <dir>", "target project root (defaults to current directory)")
+  .option("--global", "check user-global skill directory (~/.agents/skills)")
+  .option("--agent <agent>", "coding agent target (standard, antigravity, claude, cursor)")
+  .option("--json", "output status report as JSON")
+  .action((options: SkillCommandOptions) => {
+    return runSkillStatusCommand(options);
+  });
+
+skillCommand
+  .command("install")
+  .description("Install the portable Agent Skill into .agents/skills/contextforge-memory")
+  .option("--target <dir>", "target project root (defaults to current directory)")
+  .option("--global", "install to user-global skill directory (~/.agents/skills)")
+  .option("--agent <agent>", "coding agent target (standard, antigravity, claude, cursor)")
+  .option("--force", "overwrite existing installed skill files")
+  .action((options: SkillCommandOptions) => {
+    return runSkillInstallCommand(options);
+  });
+
+skillCommand
+  .command("uninstall")
+  .description("Remove the installed Agent Skill from .agents/skills/contextforge-memory")
+  .option("--target <dir>", "target project root (defaults to current directory)")
+  .option("--global", "uninstall from user-global skill directory (~/.agents/skills)")
+  .option("--agent <agent>", "coding agent target (standard, antigravity, claude, cursor)")
+  .action((options: SkillCommandOptions) => {
+    return runSkillUninstallCommand(options);
+  });
 
 void program.parseAsync(process.argv).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);

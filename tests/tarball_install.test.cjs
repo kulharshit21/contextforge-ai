@@ -141,6 +141,23 @@ test("standalone package tarball can be installed and executed in clean director
     const expForceRes = runInstalled(projectDir, "export", "--force");
     assert.equal(expForceRes.status, 0, `export --force failed: ${expForceRes.stderr}`);
     assert.match(expForceRes.stdout, /Exported 8 files/);
+
+    // skill status, install, and uninstall from clean npm installation
+    const skillStatusPre = runInstalled(projectDir, "skill", "status", "--json");
+    assert.equal(skillStatusPre.status, 0, `skill status failed: ${skillStatusPre.stderr}`);
+    assert.equal(JSON.parse(skillStatusPre.stdout).installed, false);
+
+    const skillInstall = runInstalled(projectDir, "skill", "install");
+    assert.equal(skillInstall.status, 0, `skill install failed: ${skillInstall.stderr}`);
+    assert.match(skillInstall.stdout, /ContextForge Agent Skill Installed/);
+
+    const skillStatusPost = runInstalled(projectDir, "skill", "status", "--json");
+    assert.equal(skillStatusPost.status, 0);
+    assert.equal(JSON.parse(skillStatusPost.stdout).installed, true);
+
+    const skillUninstall = runInstalled(projectDir, "skill", "uninstall");
+    assert.equal(skillUninstall.status, 0, `skill uninstall failed: ${skillUninstall.stderr}`);
+    assert.match(skillUninstall.stdout, /ContextForge Agent Skill uninstalled/);
   } finally {
     fs.rmSync(packTemp, { recursive: true, force: true });
     fs.rmSync(installTemp, { recursive: true, force: true });

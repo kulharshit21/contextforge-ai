@@ -303,3 +303,59 @@ test("evidence-level source verification rejects sibling-prefix and symlink esca
     if (!error || !["EPERM", "EACCES", "ENOSYS"].includes(error.code)) throw error;
   }
 });
+test("skill lifecycle: status, install, direct invocation, and uninstall in target project", (t) => {
+  const root = temporaryProject(t);
+
+  // 1. Initial status in clean project: not installed
+  const initialStatus = JSON.parse(checkedCli(root, "skill", "status", "--json"));
+  assert.equal(initialStatus.installed, false);
+  assert.equal(initialStatus.files.skillMd, false);
+
+  // 2. Install the skill
+  const installOutput = checkedCli(root, "skill", "install");
+  assert.match(installOutput, /ContextForge Agent Skill Installed/);
+  assert.match(installOutput, /SKILL\.md/);
+
+  // 3. Status after install: installed and verified
+  const installedStatus = JSON.parse(checkedCli(root, "skill", "status", "--json"));
+  assert.equal(installedStatus.installed, true);
+  assert.equal(installedStatus.skillName, "contextforge-memory");
+  assert.equal(installedStatus.files.skillMd, true);
+  assert.equal(installedStatus.files.script, true);
+  assert.equal(installedStatus.files.reference, true);
+
+  // 4. Overwrite protection: install without --force fails
+  const duplicateInstall = runCli(root, "skill", "install");
+  assert.notEqual(duplicateInstall.status, 0);
+  assert.match(duplicateInstall.stderr + duplicateInstall.stdout, /already installed.*--force/);
+
+  // 5. Install with --force succeeds
+  const forcedInstall = checkedCli(root, "skill", "install", "--force");
+  assert.match(forcedInstall, /ContextForge Agent Skill Installed/);
+
+  // 6. Direct invocation of the installed companion script in the target repository
+  const installedScript = path.join(root, ".agents", "skills", "contextforge-memory", "scripts", "contextforge_memory.py");
+  assert.equal(fs.existsSync(installedScript), true);
+
+  const pyInit = spawnSync("python", [installedScript, "--root", root, "init"], { encoding: "utf8" });
+  assert.equal(pyInit.status, 0, "Python skill init failed:\n" + pyInit.stderr);
+
+  const pySave = spawnSync("python", [installedScript, "--root", root, "save", "--kind", "decision", "--text", "Installed skill works seamlessly"], { encoding: "utf8" });
+  assert.equal(pySave.status, 0, "Python skill save failed:\n" + pySave.stderr);
+
+  const pyRecall = spawnSync("python", [installedScript, "--root", root, "recall", "--task", "Installed skill"], { encoding: "utf8" });
+  assert.equal(pyRecall.status, 0, "Python skill recall failed:\n" + pyRecall.stderr);
+  assert.match(pyRecall.stdout, /Installed skill works seamlessly/);
+
+  // 7. Uninstall the skill
+  const uninstallOutput = checkedCli(root, "skill", "uninstall");
+  assert.match(uninstallOutput, /ContextForge Agent Skill uninstalled/);
+  assert.equal(fs.existsSync(path.join(root, ".agents", "skills", "contextforge-memory")), false);
+
+  // Clean directory tree cleanup: .agents should be removed if empty
+  assert.equal(fs.existsSync(path.join(root, ".agents")), false);
+
+  // 8. Final status: not installed
+  const finalStatus = JSON.parse(checkedCli(root, "skill", "status", "--json"));
+  assert.equal(finalStatus.installed, false);
+});

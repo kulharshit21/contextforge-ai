@@ -76,11 +76,27 @@ Use `--budget-chars 1500` to override the budget. Size is measured in **characte
 
 ## 4. Install the portable Agent Skill
 
-If your agent supports repository-level Agent Skills discovery, copy the following folder to the repository where you work:
+You can install the portable Agent Skill into your target project with the ContextForge CLI:
 
-`.agents/skills/contextforge-memory/`
+~~~bash
+# Check if the skill is currently installed and discoverable
+contextforge skill status
 
-If the target is a different project and you are in the ContextForge source checkout, on macOS/Linux:
+# Install the skill to .agents/skills/contextforge-memory in your project
+contextforge skill install
+
+# Or install globally for user-level agent discovery (~/.agents/skills)
+contextforge skill install --global
+
+# Remove the skill cleanly when no longer needed
+contextforge skill uninstall
+~~~
+
+### Manual installation fallback
+
+If using the CLI is not preferred, manually copy `.agents/skills/contextforge-memory/` to the target repository where you work:
+
+On macOS/Linux:
 
 ~~~bash
 mkdir -p ../my-project/.agents/skills
@@ -91,10 +107,9 @@ On Windows PowerShell:
 
 ~~~powershell
 New-Item -ItemType Directory -Force ..\my-project\.agents\skills
-Copy-Item -Recurse -Force .agents\skills\contextforge-memory ..\my-project\.agents\skills\
-~~~
+Copy-Item -Recurse -Force .agents\skills\contextforge-memory ..\my-project\.agents\skills~~~
 
-Open the target project in a compatible agent and request the `contextforge-memory` skill explicitly if needed. Discovery is controlled by the particular host; ContextForge does not automatically intercept all conversations.
+Open the target project in a compatible agent (Codex, Antigravity, Claude Code, Cursor) and request the `contextforge-memory` skill explicitly. Discovery is controlled by the particular host; ContextForge does not automatically intercept all conversations.
 
 With a copy of the skill in the target project:
 
