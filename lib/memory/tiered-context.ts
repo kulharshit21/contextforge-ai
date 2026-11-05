@@ -1,4 +1,5 @@
 import path from "node:path";
+import { realpath, stat } from "node:fs/promises";
 import { pathExists } from "../utils/fs";
 import { type ContextLevel, type JournalEvent } from "./schemas";
 import { getActiveEvents } from "./journal";
@@ -73,9 +74,35 @@ export async function scoreAndRankEvents(
     let sourceVerified: boolean | undefined = undefined;
     if (workspaceRoot && e.source) {
       const cleanSource = e.source.split("@")[0].trim();
-      const resolved = path.resolve(workspaceRoot, cleanSource);
-      if (resolved.startsWith(path.resolve(workspaceRoot))) {
-        sourceVerified = await pathExists(resolved);
+      // Git references and URLs are evidence identifiers, not local file paths.
+      if (cleanSource && !/^(?:git:|https?:\/\/|#\d+\b)/i.test(cleanSource)) {
+        const projectRoot = path.resolve(workspaceRoot);
+        const resolved = path.resolve(projectRoot, cleanSource);
+        const relative = path.relative(projectRoot, resolved);
+        const lexicalInside = relative !== ".."
+          && !relative.startsWith(".." + path.sep)
+          && !path.isAbsolute(relative);
+
+        if (!lexicalInside) {
+          sourceVerified = false;
+        } else if (!(await pathExists(resolved))) {
+          sourceVerified = false;
+        } else {
+          try {
+            const [realRoot, realTarget, fileStat] = await Promise.all([
+              realpath(projectRoot),
+              realpath(resolved),
+              stat(resolved),
+            ]);
+            const realRelative = path.relative(realRoot, realTarget);
+            sourceVerified = fileStat.isFile()
+              && realRelative !== ".."
+              && !realRelative.startsWith(".." + path.sep)
+              && !path.isAbsolute(realRelative);
+          } catch {
+            sourceVerified = false;
+          }
+        }
       }
     }
 
