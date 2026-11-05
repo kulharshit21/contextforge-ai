@@ -57,7 +57,7 @@ From the **project in which you want to use the skill**, with Node.js 22.20+ and
 npx skills add kulharshit21/contextforge-ai --skill contextforge-memory -a codex
 ~~~
 
-Replace \`codex\` with a host supported by your installed [skills CLI](https://github.com/vercel-labs/skills), such as \`antigravity\` or \`claude-code\`. To inspect what would be discovered before installing:
+Replace `codex` with a host supported by your installed [skills CLI](https://github.com/vercel-labs/skills), such as `antigravity` or `claude-code`. To inspect what would be discovered before installing:
 
 ~~~bash
 npx skills add kulharshit21/contextforge-ai --list
