@@ -4,6 +4,13 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Reproducible context-retention benchmark against equal-budget baselines (issue #17):
+  - Curated 30 held-out multi-session engineering scenarios in `benchmarks/fixtures/tasks.json` with human-verified gold facts across 15 technical domains.
+  - Built standalone evaluator `benchmarks/run_benchmark.py` testing critical-fact recall (with 95% confidence intervals), evidence citation fidelity, injection resistance, stale info leakage, and retrieval latency against naive recency truncation and uniform sampling under identical character budgets.
+  - Published comprehensive results and negative case analysis in `docs/BENCHMARK_RESULTS.md`, reporting empirical tradeoffs without fabricated claims.
+  - Added automated CI regression gate `tests/benchmark.test.cjs` asserting >=80% critical fact recall and prompt injection neutralization.
+  - Added `npm run benchmark` script.
+
 - Dependency vulnerability audit and triage (issue #2):
   - Upgraded `simple-git` to `^4.0.2` resolving critical vulnerability GHSA-v5rq-49vh-5v5c (`VISUAL` editor omission) and command injection vectors in `@simple-git/argv-parser`. Refactored git calls to use named exports and strict typing.
   - Upgraded `zod` to `^4.6.7` resolving high severity vulnerability GHSA-mrhx-c7xc-m3w5 (collection parsing memory exhaustion).
