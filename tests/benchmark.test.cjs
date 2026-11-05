@@ -40,13 +40,13 @@ test("reproducible context-retention benchmark against equal-budget baselines", 
     `ContextForge recall (${cf.recall_mean}) must outperform naive recency (${rec.recall_mean}) under constrained budget`
   );
 
-  // 2. Citation Fidelity
+  // 2. Source-string presence (not human-verified citation fidelity)
   assert.ok(
     cf.citation_rate_mean >= 0.75,
     `ContextForge citation fidelity (${cf.citation_rate_mean}) should be at least 75%`
   );
 
-  // 3. Injection Resistance
+  // 3. Exact suspicious-string inclusion (not downstream agent safety)
   assert.ok(
     cf.total_injections_leaked <= 5,
     `ContextForge should neutralize prompt injections (leaked: ${cf.total_injections_leaked} vs recency: ${rec.total_injections_leaked})`

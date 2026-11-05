@@ -70,4 +70,4 @@ jobs:
         with:
           python-version: "3.12"
       - name: Test offline memory skill
-        run: python -m unittest discover -s tests -p "test_agent_memory.py" -v
+        run: python -m unittest discover -s tests -p "test_*.py" -v
