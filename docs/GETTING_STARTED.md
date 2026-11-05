@@ -88,9 +88,13 @@ contextforge skill install
 # Or install globally for user-level agent discovery (~/.agents/skills)
 contextforge skill install --global
 
-# Remove the skill cleanly when no longer needed
+# Verify the skill is actually recognized by your chosen coding agent
+
+# Remove a ContextForge-managed, unmodified skill installation (manual installations require manual review)
 contextforge skill uninstall
 ~~~
+
+The installer records file checksums in a local `.contextforge-install.json` manifest. To prevent data loss, `uninstall` and `install --force` refuse to modify a manual installation, a modified installed file, or a directory with extra files. Back up and review those installations manually. `status` verifies file presence, not whether a particular AI agent has loaded or invoked the skill.
 
 ### Manual installation fallback
 
@@ -107,7 +111,8 @@ On Windows PowerShell:
 
 ~~~powershell
 New-Item -ItemType Directory -Force ..\my-project\.agents\skills
-Copy-Item -Recurse -Force .agents\skills\contextforge-memory ..\my-project\.agents\skills~~~
+Copy-Item -Recurse -Force .agents\skills\contextforge-memory ..\my-project\.agents\skills\
+~~~
 
 Open the target project in a compatible agent (Codex, Antigravity, Claude Code, Cursor) and request the `contextforge-memory` skill explicitly. Discovery is controlled by the particular host; ContextForge does not automatically intercept all conversations.
 
