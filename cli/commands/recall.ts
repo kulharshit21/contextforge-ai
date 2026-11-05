@@ -38,7 +38,15 @@ export async function runRecallCommand(
   });
 
   if (options.out) {
-    await writeFile(options.out, result.output, "utf8");
+    try {
+      // Exclusive create prevents recall from clobbering existing project files.
+      await writeFile(options.out, result.output, { encoding: "utf8", flag: "wx" });
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "EEXIST") {
+        throw new Error(`Refusing to overwrite existing output file: ${options.out}`);
+      }
+      throw error;
+    }
     console.log(`Saved ${result.selectedCount} records to ${options.out} (${result.level} level)`);
   } else {
     process.stdout.write(result.output);
