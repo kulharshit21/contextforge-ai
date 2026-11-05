@@ -4,6 +4,11 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Added focused regression test suite for note classification and drift detection (issue #13):
+  - Covered deterministic classification precedence across mixed decision/API, bug/feature, failed attempts, and privacy rules.
+  - Covered drift detection for missing scripts, framework mismatches, deleted paths, and undocumented environment variables.
+  - Added tests/fixtures/README.md documenting classifier precedence, regex tradeoffs, and offline limitations.
+
 - Unified memory interface across TypeScript CLI and Python agent-memory skill:
   - Implemented `lib/memory/journal.ts` with 100% SHA-256 hash-chain and JSONL binary compatibility with the Python skill engine.
   - Implemented `lib/memory/tiered-context.ts` supporting three context recovery tiers: `handoff` (compact), `capsule` (standard), and `evidence` (provenance-backed with file existence and Git SHA anchors).
