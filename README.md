@@ -1,120 +1,108 @@
 # ContextForge
 
-**Local-first project memory for AI coding agents.** Keep decisions, known bugs, architecture, and setup notes in versioned Markdown, then create task-specific context capsules for Codex, Cursor, Claude, Copilot, Gemini, and other assistants.
+**Local project memory for AI coding agents.** Record the decisions, fixes, constraints, and unfinished work that matter, then bring the right context into your next coding session.
 
 [![CI](https://github.com/kulharshit21/contextforge-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/kulharshit21/contextforge-ai/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> Git records *what* changed. ContextForge helps preserve *why*.
+> Git tells you what changed. ContextForge helps you remember why.
 
-**Project status:** early-stage open-source MVP. The repository contains a local CLI, dashboard, mock/offline functionality, and CI checks. It is **not yet published to npm**. Some features described in the roadmap are proposals, not shipped features.
+ContextForge is an **early-stage, MIT-licensed project** with two entry points: a Node.js CLI for maintaining project context and a portable Python-based Agent Skill for session handoffs. It works offline by default. The source is available here; **there is no published npm release yet**.
 
-## Unified memory architecture
+## Why ContextForge?
 
-ContextForge combines two synchronized storage formats:
+Coding sessions often lose the reasoning behind a change: why a library was chosen, which fix failed, what was verified, or which blocker remains. ContextForge keeps those notes in your project workspace so they can be recovered after a new session or a long conversation.
 
-1. **Append-only journal (`.contextforge/agent-memory/events.jsonl`)**: A tamper-evident, SHA-256 hash-chained ledger storing discrete decisions, bugs, tests, blockers, next steps, facts, and handoffs with Git SHA and file anchors.
-2. **Structured Markdown (`.contextforge/*.md`)**: Human-readable, versioned documents (`DECISIONS.md`, `ARCHITECTURE.md`, `CURRENT_TASKS.md`, `BUGS_AND_FIXES.md`, etc.) for direct editing and agent indexing.
+- **Checkpoint:** Save decisions, bugs, tests, blockers, and next steps, optionally linked to evidence.
+- **Recall:** Select relevant entries with an explicit character budget (`handoff`, `capsule`, or `evidence`).
+- **Audit:** Verify an append-only journal and inspect project memory.
+- **Stay local:** No model API or account is needed for the default workflow.
 
-Both the TypeScript Node CLI and the zero-dependency Python Agent Skill share the exact same hash-chain contract and storage format. A checkpoint made in the CLI is immediately verifiable by the Python skill, and vice versa.
+ContextForge is **not** an automatic replacement for model-native context compaction, and retrieved notes still need verification.
 
-### Agent skill: local memory checkpoints and context recovery
+## Quick start: CLI
 
-A portable, open-format agent skill is located at
-[.agents/skills/contextforge-memory/SKILL.md](.agents/skills/contextforge-memory/SKILL.md).
-
-An AI coding agent can use this skill to:
-
-- record compact **decisions, test outcomes, bugs, blockers, and next actions** with evidence references;
-- recover task-relevant records via tiered context budgets (`handoff`, `capsule`, or `evidence`);
-- preserve corrections without silently changing earlier history;
-- verify and repair the local append-only journal after interrupted sessions.
-
-It does **not** intercept or replace built-in AI compaction, autonomously monitor all chats, or claim better benchmark performance than native model memory. Its retrieval is deterministic and keyword-based; agent-written notes still need verification.
-
-### Quick start (CLI)
-
-**Requirements:** Node.js 24 (CI target), npm, and Git for full repository metadata. Linux, macOS, and Windows are supported.
+**Requirements:** Node.js 24 is the CI reference version, plus npm. Git is optional but helps with repository metadata.
 
 ~~~bash
 git clone https://github.com/kulharshit21/contextforge-ai.git
 cd contextforge-ai
 npm ci
 npm link
-contextforge --help
 ~~~
 
-Now run the linked CLI from a **different project directory** (not the ContextForge source repository):
+In a different project directory, run:
 
 ~~~bash
-cd /path/to/your-project
 contextforge init
-contextforge checkpoint "Selected SQLite for local storage" --kind decision --source docs/ARCHITECTURE.md
-contextforge checkpoint "Blocker: need Windows CI test" --kind blocker
-contextforge recall --level handoff --budget-chars 1500
-contextforge scan
-contextforge capsule "Add robust error handling"
-contextforge doctor
-contextforge audit --verbose
-contextforge export --all
-contextforge stats
+contextforge checkpoint "Use SQLite for the local cache" --kind decision --source docs/architecture.md
+contextforge checkpoint "Add a Windows install test" --kind next
+contextforge recall "SQLite caching" --level handoff
+contextforge audit
 ~~~
 
-On Windows, replace the example directory with the path to your target project in PowerShell. The command runs in the directory from which you invoke it and creates local files under that project's `.contextforge/` folder. Export refuses to overwrite existing instruction files by default. **Review and back up files before passing `--force`**.
+`init` creates a local `.contextforge/` workspace. Checkpointing through the CLI writes to the journal and structured Markdown. `recall` produces a task-specific view; it does not rewrite previous decisions. Generated local memory is ignored by Git in this repository; set an equivalent ignore rule in any other project where you install the tool.
 
-### Platform verification & empirical benchmarks
+**Important:** `npm link` uses your checked-out source. The package is currently private and **not** published; do not assume `npx contextforge` installs this project.
 
-See our verified platform walkthroughs with exact commands, exit codes, and sanitized logs:
-- [Windows 11 CLI Verification](docs/platforms/WINDOWS_VERIFICATION.md)
-- [macOS CLI Verification](docs/platforms/MACOS_VERIFICATION.md)
-- [Context-Retention Benchmark Report (Issue #17)](docs/BENCHMARK_RESULTS.md)
-- [Dependency Security Audit & Triage (Issue #2)](docs/DEPENDENCY_AUDIT.md)
+For Windows PowerShell, platform-specific examples, additional commands, and output-file safety, see the [getting-started guide](docs/GETTING_STARTED.md).
 
-**Why not npx?** This package is currently marked private and is not published. Do not use the unverified command `npx contextforge` from the public npm registry. Until an audited package release is published, use `npm link` or run `node /path/to/contextforge-ai/bin/contextforge.js` from your target project.
+## Use as an Agent Skill
 
-## Local dashboard
+The portable skill is in [`.agents/skills/contextforge-memory/`](.agents/skills/contextforge-memory/). Copy that directory into your target repository's `.agents/skills/` directory (or the user-level skills directory supported by your agent). See its [SKILL.md](.agents/skills/contextforge-memory/SKILL.md) for how to invoke it.
+
+The companion script uses **Python 3.10+ and the standard library**. It can checkpoint and recover journal records without the Node.js CLI. **It does not automatically synchronize Python-written entries into the human-readable Markdown files**; see the [architecture notes](docs/ARCHITECTURE.md).
+
+## How it works
+
+~~~text
+Agent or developer
+    |
+    +-- Node CLI checkpoint ------> append-only journal
+    |                                   |
+    |                                   +--> task-specific recall
+    |                                   |
+    +-- Python Agent Skill -------------+
+    |
+    +-- CLI checkpoint --> structured Markdown files
+~~~
+
+The journal is stored under `.contextforge/agent-memory/events.jsonl`. Each entry includes a kind, source reference, timestamp, and hash-chain link. A hash chain can detect accidental edits; it does **not** make user-controlled files tamper-proof. The memory itself remains local unless you choose to share or configure external services.
+
+`contextforge sync` currently imports Markdown entries into the journal; it is **not a complete bidirectional synchronization engine**. See the [architecture](docs/ARCHITECTURE.md) before relying on it for migration or backup.
+
+## Other included tools
+
+| Component | Use |
+| --- | --- |
+| `contextforge scan` / `doctor` | Inspect repository structure and flag likely stale assumptions |
+| `contextforge capsule "task"` | Generate a saved, task-specific context capsule |
+| `contextforge export` | Export instructions for AGENTS.md, Claude, Gemini, Cursor, and Copilot |
+| Local dashboard | Explore seeded examples and an editable local workspace |
+
+The dashboard is a **localhost development tool**, not an authenticated multi-user service. Vercel hosts a read-only seeded demo; do not expose local filesystem-backed endpoints to the public internet.
+
+To start the dashboard from this source checkout:
 
 ~~~bash
-cd contextforge-ai
-npm ci
 npm run dev
 ~~~
 
-Visit http://127.0.0.1:3000. The development and production start scripts bind to loopback by default because the app has local filesystem-backed endpoints and **does not yet implement multi-user authentication**. Do not expose it on a public server or untrusted network.
+Open http://127.0.0.1:3000.
 
-With no cloud credentials, you can explore the seeded demo and local workspace. Vercel deployments show a read-only demo rather than persisting local workspace files.
+## Documentation
 
-## CLI reference
+- [Getting started: CLI and skill](docs/GETTING_STARTED.md)
+- [Architecture and storage semantics](docs/ARCHITECTURE.md)
+- [Agent Skill instructions](.agents/skills/contextforge-memory/SKILL.md)
+- [CLI demo walkthrough](docs/README_DEMO.md)
+- [Documentation index](docs/README.md)
+- [Internal synthetic benchmark and limitations](docs/BENCHMARK_RESULTS.md)
+- [Security reporting](SECURITY.md)
 
-| Command | Purpose |
-| --- | --- |
-| `contextforge init` | Initialize structured local memory and append-only event journal |
-| `contextforge checkpoint <text>` | Save a typed, provenance-backed memory checkpoint (synced to Markdown) |
-| `contextforge recall [task]` | Restore task context across tiers: `--level handoff\|capsule\|evidence` |
-| `contextforge audit` | Validate hash-chain integrity, kind breakdown, and lock status |
-| `contextforge repair` | Safely recover from crashed writes or stale locks with timestamped `.bak` |
-| `contextforge sync` | Synchronize Markdown memory files with the event journal |
-| `contextforge remember "note"` | Store a note in an inferred section and journal |
-| `contextforge ingest-chat ./notes.txt` | Extract memory from local text |
-| `contextforge scan` | Refresh repository metadata and Git facts |
-| `contextforge capsule "task"` | Save a task-specific context capsule |
-| `contextforge doctor` | Report likely inconsistencies or drift |
-| `contextforge export --all` | Generate agent instructions without overwriting existing files; `--force` allows intentional replacement |
-| `contextforge stats` | Inspect local workspace summary and journal counts |
-| `contextforge ui` | Show dashboard startup steps |
+The benchmark is an **internal synthetic-fixture regression evaluation**, not proof of improvements over native model compaction or of downstream agent safety. Its current methodological limitations are tracked in [issue #28](https://github.com/kulharshit21/contextforge-ai/issues/28).
 
-## Design and privacy
-
-- The source of truth is local Markdown under `.contextforge/` and verified journal events.
-- The default provider is mock; no remote LLM is required.
-- `CONTEXTFORGE_PRIVACY_MODE=local` blocks Gemini through the provider resolver.
-- To intentionally use a cloud model, review data handling and set `CONTEXTFORGE_PRIVACY_MODE=cloud` plus provider credentials. **Do not upload private source or chats without permission.**
-- Repo scans may include paths, Git author names, and commit messages. Inspect them before sharing.
-- Files in `.contextforge/`, `workspaces/`, and local environment files are ignored by Git by default.
-
-See [.env.example](.env.example), [architecture](docs/ARCHITECTURE.md), [demo walkthrough](docs/README_DEMO.md), and [security policy](SECURITY.md).
-
-## Quality checks
+## Development and contributing
 
 ~~~bash
 npm ci
@@ -125,26 +113,12 @@ npm run build
 python -m unittest discover -s tests -p "test_*.py" -v
 ~~~
 
-CI runs these checks plus a CLI smoke test across Linux, macOS, and Windows. A green status applies only to the current commit; see GitHub Actions for evidence.
+The repository's CI includes Node.js checks on Linux and Python skill tests on Linux, macOS, and Windows. See the [platform verification notes](docs/README.md) for additional manual checks and their scope.
 
-## Contribute
+Issues and thoughtful pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md), consult the [issue tracker](https://github.com/kulharshit21/contextforge-ai/issues), and follow the [code of conduct](CODE_OF_CONDUCT.md). AI-assisted changes are welcome when contributors take responsibility for understanding, testing, and reviewing their submissions.
 
-Contributions are welcome, especially Windows/macOS verification, parser and drift edge cases, documentation clarity, and security review. Start with [CONTRIBUTING.md](CONTRIBUTING.md), open a reproducible issue, and send a focused PR. Be respectful and avoid uploading real secrets or confidential transcripts.
+## Project status
 
-- [Issues](https://github.com/kulharshit21/contextforge-ai/issues)
-- [Pull requests](https://github.com/kulharshit21/contextforge-ai/pulls)
-- [Security reporting](SECURITY.md)
-- [Changelog](CHANGELOG.md)
+ContextForge is maintained by [@kulharshit21](https://github.com/kulharshit21). Its CLI and skill have automated tests, but the project has **no published package or tagged release**, no demonstrated independent adoption benchmark, and no claim of production-grade public hosting. See the [changelog](CHANGELOG.md) and [release checklist](docs/RELEASE_CHECKLIST.md).
 
-## Roadmap (not shipped)
-
-- Audited npm distribution with a self-contained CLI bundle
-- Complete cross-platform testing and automated versioned releases
-- Preview/approval workflows for every generated memory change
-- Richer GitHub PR/issue ingestion and opt-in integration
-- Optional auth and cloud sync
-- Actual MCP server (today only the manifest export exists)
-
-## License
-
-[MIT](LICENSE). Maintained by [@kulharshit21](https://github.com/kulharshit21). Early-stage project; feedback and real usage reports are appreciated.
+Licensed under [MIT](LICENSE).

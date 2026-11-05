@@ -1,104 +1,82 @@
-# ContextForge Context-Retention Benchmark Results
+# ContextForge benchmark: internal synthetic-fixture evaluation
 
-*Date: 2026-11-05*  
-*Related GitHub Issue: #17*  
-*Harness: `benchmarks/run_benchmark.py`*  
-*Dataset: `benchmarks/fixtures/tasks.json` (30 held-out multi-session tasks)*
+**Status: preliminary; methodological corrections pending.**  
+**Recorded:** November 5, 2026  
+**Runner:** [`benchmarks/run_benchmark.py`](../benchmarks/run_benchmark.py)  
+**Fixtures:** [`benchmarks/fixtures/tasks.json`](../benchmarks/fixtures/tasks.json)  
+**Correction tracker:** [issue #28](https://github.com/kulharshit21/contextforge-ai/issues/28)
 
----
+ContextForge includes a deterministic regression benchmark to check whether lexical retrieval retains selected facts from synthetic multi-session development histories. The numbers below were reported by the current harness. **They are not validated measures of human project-memory performance, model-native compaction superiority, or practical prompt-injection safety.**
 
-## 1. Executive Summary & Objective
+## What the test actually does
 
-The goal of this benchmark is to measure whether ContextForge memory retrieval preserves task-critical software engineering facts across multi-session workflows when context budgets are constrained, compared to equal-budget baselines.
+The fixture generation script creates 30 synthetic engineering scenarios with tasks, events, predefined gold fact keywords, sources and distractors. The benchmark runs three selectors over those same fixtures at fixed character budgets:
 
-In accordance with project guidelines:
-- **No inflated claims:** We do not claim ContextForge automatically outperforms or replaces native LLM context compaction.
-- **Equal budgets:** All methods are evaluated under identical character constraints (1,200 and 1,800 characters).
-- **Truthful reporting:** All results, including negative cases and neutral ties, are documented.
+- Recent-first record selection.
+- Uniformly shuffled record selection with a fixed random seed.
+- ContextForge's local keyword/type-prioritized recall.
 
----
+The evaluator marks a gold fact as found when at least 60% of its specified keywords appear in the returned string. It checks whether a source string appears for citations and whether an exact adversarial string appears for potential injection exposure.
 
-## 2. Experimental Methodology
+**All 30 fixtures are included in the repository and repeatedly used by CI.** There is currently no evidence of independent human adjudication, unseen developer workflows, or a separate final holdout set. The fixture labels were authored/generated within the project and should not be described as independently human-verified.
 
-### 2.1 Dataset Composition
-- **30 held-out engineering scenarios** spanning 15 distinct domains:
-  - Backend APIs (JWT revocation, Stripe webhook idempotency, rate limiting, GraphQL N+1, gRPC deadlines)
-  - Databases (connection pool leaks, SQLite WAL concurrency, PostgreSQL GIN indexes, Prisma migration drift, optimistic locking, full-text search)
-  - Concurrency & Performance (distributed mutexes, Node.js EventEmitter memory leaks, zero-copy streams)
-  - Security & Compliance (CORS misconfiguration, OAuth2 PKCE, partitioned cookies, middleware bypasses, mTLS, mass assignment, audit logging)
-  - DevOps & Testing (Docker multi-stage optimization, Kafka consumer rebalance, test worker schema isolation, graceful SIGTERM shutdown)
-- **Multi-session structure:** Each task represents 4–6 development sessions totaling 22 events (~1,557 characters of historical notes).
-- **Gold facts:** 5 human-verified critical facts per scenario distributed across early architecture decisions (Session 1), root-cause bug discoveries (Session 3), and active blockers/next steps (Session 5).
-- **Distractors & noise:** Realistic non-critical events (dependency bumps, lint rules, styling changes, scratch notes).
-- **Adversarial injections:** Deliberate prompt injection payloads embedded in historical logs to test safety screening.
-- **Superseded items:** Historical decisions explicitly marked as obsolete.
+## Previously recorded results (not a fair externally validated comparison)
 
-### 2.2 Evaluated Methods (Equal Budget)
-1. **Recency Truncation (Recent-N):** Naive reverse-chronological tail truncation until character budget is reached.
-2. **Uniform Sampling:** Uniformly distributed historical note sampling across all sessions until budget is reached.
-3. **ContextForge Lexical Retrieval:** Kind-prioritized (blockers and next steps first) and task-query lexical keyword ranking, executed via `contextforge_memory.py recall`.
+These are historical outputs from the original harness, retained for traceability while [issue #28](https://github.com/kulharshit21/contextforge-ai/issues/28) is resolved.
 
----
+| Metric at 1,200-character nominal budget | Recent-first | Uniform shuffle | ContextForge |
+| --- | ---: | ---: | ---: |
+| Keyword-based gold-fact recall | 44.7% | 63.3% | 86.0% |
+| Source-string presence among gold facts | 0.0% | 0.0% | 84.7% |
+| Exact suspicious payload strings emitted (30 fixtures) | 30 | 30 | 1 |
+| Average retrieval latency (original report) | under 1 ms | under 1 ms | about 68 ms |
 
-## 3. Benchmark Results
+At 1,800 characters, the original runner reported 64.7% recent-first recall, 64.7% uniform recall, and 91.3% ContextForge recall. These are **historical regression measurements**, not a claim of generalization.
 
-### 3.1 Primary Evaluation: Constrained Budget (1,200 Characters / ~300 Tokens)
+The original report also included confidence intervals. Those intervals describe variation among these 30 synthetic scenarios, **not uncertainty over all real software-development tasks**.
 
-| Evaluation Metric | Recency Truncation | Uniform Sampling | ContextForge Lexical |
-|---|---|---|---|
-| **Critical Fact Recall (95% CI)** | 44.7% (±3.2%) | 63.3% (±2.8%) | **86.0% (±5.9%)** |
-| **Evidence Citation Fidelity** | 0.0% | 0.0% | **84.7%** |
-| **Adversarial Injections Leaked** | 30 / 30 (100%) | 30 / 30 (100%) | **1 / 30 (3.3%)** |
-| **Superseded / Stale Info Leakage** | 0.0% | 0.0% | 10.0% |
-| **Retrieval Latency (Mean)** | < 1 ms | < 1 ms | **68.0 ms** |
+## Known methodology defects
 
-### 3.2 Moderate Budget: Standard Task Capsule (1,800 Characters / ~450 Tokens)
+### 1. Source-reference comparison is asymmetric
 
-| Evaluation Metric | Recency Truncation | Uniform Sampling | ContextForge Lexical |
-|---|---|---|---|
-| **Critical Fact Recall (95% CI)** | 64.7% (±3.2%) | 64.7% (±3.2%) | **91.3% (±5.8%)** |
-| **Evidence Citation Fidelity** | 0.0% | 0.0% | **89.3%** |
-| **Adversarial Injections Leaked** | 30 / 30 (100%) | 30 / 30 (100%) | **3 / 30 (10.0%)** |
-| **Superseded / Stale Info Leakage** | 93.3% | 0.0% | 16.7% |
-| **Retrieval Latency (Mean)** | < 1 ms | < 1 ms | **68.1 ms** |
+The recent-first and uniform baselines count a source reference toward their character budget, but their emitted text omits that source. The evaluator then awards them zero citation presence by construction. The citation results therefore **cannot support a superiority claim** until all selectors use comparable output formats.
 
----
+### 2. The stale/superseded test is incomplete
 
-## 4. Analysis of Negative Cases & Limitations
+Fixtures mark some events `is_superseded`, but `setup_workspace()` currently writes `supersedes: None` to every event. That does not exercise the journal's actual superseding link. Current stale-leak numbers must not be used as validated evidence that a history is correctly retired.
 
-ContextForge is a local, deterministic, keyword- and kind-prioritized memory system. It does not use neural semantic embeddings or LLM summarization during default offline recall.
+### 3. Exact-string filtering is not agent-injection resistance
 
-### 4.1 Documented Negative Cases (1,200 Character Budget)
-Out of 30 evaluated tasks, **2 cases (6.7%)** failed to outperform naive recency:
-1. **`task-04-database-connection-pool-leak` (Database):**
-   - *ContextForge Recall:* 40%
-   - *Recency Recall:* 60%
-   - *Root Cause:* The critical bug resolution and PgBouncer blocker occurred in the final two commits. Recency truncation captured both immediately, whereas ContextForge's lexical scoring allocated a portion of the budget to early architectural pool rules, missing the recent runtime flag.
-2. **`task-28-schema-validation-stripping` (Security):**
-   - *ContextForge Recall:* 60%
-   - *Recency Recall:* 60%
-   - *Root Cause:* Neutral tie. Both methods captured 3 of the 5 gold facts under the strict 1,200-character cap.
+The "injection leaked" figure is based on whether a malicious-looking fixture string appears in the output. It does **not** run a downstream agent, observe instruction following, or establish an actual attack-success or neutralization rate. It is a potentially useful *payload-inclusion regression check*, not a security guarantee.
 
-### 4.2 Tradeoffs & Failure Modes
-- **Vocabulary Mismatch:** When the incoming task prompt uses terminology absent from the saved memory tags (e.g. "mutual authentication" vs "client certificates"), lexical BM25/keyword scoring degrades.
-- **Stale Note Ingestion:** In ~10–16% of scenarios, superseded historical notes containing matching query keywords were included in the output when the superseded link was not explicitly checked.
-- **Model-Native Compaction:** Model-native context compaction baselines (e.g. Gemini 2.5 context caching or Claude compaction) were not included in this deterministic offline runner to avoid non-reproducible network latency, temperature variance, and paid API dependencies.
+### 4. Gold-fact recall is a keyword proxy
 
----
+Matching 60% of hand-authored fixture keywords is not equivalent to checking that the selected content accurately preserves the full meaning of a decision. A record might match the keywords while contradicting the true project state.
 
-## 5. Reproduction & Verification
+### 5. The dataset isn't an independent unseen test
 
-To reproduce these benchmark numbers locally:
+The scenario generator, test fixtures, retrieval heuristics and gate are all present in one repository. Passing an 80% recall gate on this dataset is good as a regression check, but it does not demonstrate performance on unrelated real projects.
 
-```bash
-# Run full benchmark with default 1200 char budget
+### 6. Context budgets and latency need normalization
+
+The algorithms have different serialization and process overhead. Compare actually emitted output sizes, account for headers and references equally, and report retrieval-only latency separately from Python process startup. There is no model-native compaction baseline in the current test.
+
+## What we can responsibly say today
+
+- The harness is executable and suitable for detecting some regressions on its stored synthetic fixtures.
+- In the original run, ContextForge's keyword selector recovered more predefined fact keywords than the two basic synthetic-history selectors.
+- The source-citation and injection numbers are **not valid evidence of real-world citation fidelity or protection against agent instruction attacks**.
+- We need a fair re-run, genuine independent task annotations and more realistic baselines before making public performance claims.
+
+## Reproduce and improve
+
+~~~bash
+npm ci
 npm run benchmark
-
-# Or run with custom budget
 python benchmarks/run_benchmark.py 1800
+npm test
+~~~
 
-# Automated CI regression gate
-npm test -- tests/benchmark.test.cjs
-```
+The runner writes `benchmarks/results.json`. Review the script and resulting JSON before quoting numbers. To improve this benchmark, follow the acceptance criteria in [issue #28](https://github.com/kulharshit21/contextforge-ai/issues/28): make baselines comparable, represent supersession correctly, use honest metric names, split held-out evaluation from CI fixtures, and publish positive **and negative** cases.
 
-The benchmark test in `tests/benchmark.test.cjs` is enforced in CI to prevent regressions in critical fact recall, citation alignment, and injection resistance.
+We welcome reproducible evaluation contributions; see [CONTRIBUTING.md](../CONTRIBUTING.md).
