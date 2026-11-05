@@ -2,8 +2,8 @@
 """ContextForge context-retention benchmark runner.
 
 Measures critical-fact retention, false-positive/stale information rate,
-evidence citation fidelity, prompt-injection resistance, and retrieval latency
-across 30 held-out multi-session software engineering tasks against equal-budget baselines.
+source-reference string presence, suspicious payload inclusion, and retrieval latency
+across 30 generated synthetic multi-session scenarios against character-budget baselines.
 """
 
 import hashlib
@@ -80,7 +80,12 @@ def baseline_recency(events: List[dict], budget: int) -> Tuple[str, List[dict], 
         consumed += len(chunk)
 
     elapsed_ms = (time.perf_counter() - t_start) * 1000.0
-    text_out = "".join(f"- [{ev['kind']}] {ev['text']}\n" for ev in selected)
+    text_out = "".join(
+        f"- [{ev['kind']}] {ev['text']}"
+        + (f" (source: {ev['source']})" if ev.get("source") else "")
+        + "\n"
+        for ev in selected
+    )
     return text_out, selected, elapsed_ms
 
 
@@ -103,7 +108,12 @@ def baseline_uniform(events: List[dict], budget: int, seed: int = 42) -> Tuple[s
         consumed += len(chunk)
 
     elapsed_ms = (time.perf_counter() - t_start) * 1000.0
-    text_out = "".join(f"- [{ev['kind']}] {ev['text']}\n" for ev in selected)
+    text_out = "".join(
+        f"- [{ev['kind']}] {ev['text']}"
+        + (f" (source: {ev['source']})" if ev.get("source") else "")
+        + "\n"
+        for ev in selected
+    )
     return text_out, selected, elapsed_ms
 
 
@@ -151,7 +161,7 @@ def evaluate_retrieval(output_text: str, scenario: dict) -> Dict[str, Any]:
             if ev["text"].lower() in output_text.lower():
                 superseded_leaked += 1
 
-    # Check adversarial injection leakage
+    # Check exact inclusion of synthetic adversarial strings; this is not agent attack success.
     injections_leaked = 0
     injections_total = 0
     for ev in scenario["events"]:
@@ -160,7 +170,7 @@ def evaluate_retrieval(output_text: str, scenario: dict) -> Dict[str, Any]:
             if ev["text"].lower() in output_text.lower():
                 injections_leaked += 1
 
-    # Citation alignment: presence of source paths in the output
+    # Source-string presence: does not certify that evidence proves the claim.
     source_present = 0
     for ev in scenario["events"]:
         if ev.get("is_gold") and ev.get("source"):
@@ -279,7 +289,7 @@ def run_benchmark(budget: int = 1200) -> Dict[str, Any]:
                 })
 
     # Compile Summary Table
-    print(f"{'Method':<25} | {'Recall (95% CI)':<20} | {'Stale Leak':<12} | {'Inj. Leaks':<12} | {'Citation %':<12} | {'Latency (ms)':<12}")
+    print(f"{'Method':<25} | {'Recall (95% CI)':<20} | {'Stale Leak':<12} | {'Payload strs.':<12} | {'Citation %':<12} | {'Latency (ms)':<12}")
     print("-" * 105)
 
     summary_stats = {}
