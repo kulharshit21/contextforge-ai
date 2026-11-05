@@ -80,7 +80,7 @@ The journal is stored under `.contextforge/agent-memory/events.jsonl`. Each entr
 | `contextforge export` | Export instructions for AGENTS.md, Claude, Gemini, Cursor, and Copilot |
 | Local dashboard | Explore seeded examples and an editable local workspace |
 
-The dashboard is a **localhost development tool**, not an authenticated multi-user service. Vercel hosts a read-only seeded demo; do not expose local filesystem-backed endpoints to the public internet.
+The dashboard is a **localhost development tool**, not an authenticated multi-user service. Vercel hosts a read-only seeded demo; do not expose local filesystem-backed endpoints to the public internet. The pinned Next.js version is affected by a [high-severity advisory](https://github.com/vercel/next.js/security/advisories/GHSA-8h8q-6873-q5fj); see [issue #32](https://github.com/kulharshit21/contextforge-ai/issues/32) before hosting the demo.
 
 To start the dashboard from this source checkout:
 
