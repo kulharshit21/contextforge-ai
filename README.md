@@ -62,6 +62,14 @@ contextforge stats
 
 On Windows, replace the example directory with the path to your target project in PowerShell. The command runs in the directory from which you invoke it and creates local files under that project's `.contextforge/` folder. Export refuses to overwrite existing instruction files by default. **Review and back up files before passing `--force`**.
 
+### Platform verification & empirical benchmarks
+
+See our verified platform walkthroughs with exact commands, exit codes, and sanitized logs:
+- [Windows 11 CLI Verification](docs/platforms/WINDOWS_VERIFICATION.md)
+- [macOS CLI Verification](docs/platforms/MACOS_VERIFICATION.md)
+- [Context-Retention Benchmark Report (Issue #17)](docs/BENCHMARK_RESULTS.md)
+- [Dependency Security Audit & Triage (Issue #2)](docs/DEPENDENCY_AUDIT.md)
+
 **Why not npx?** This package is currently marked private and is not published. Do not use the unverified command `npx contextforge` from the public npm registry. Until an audited package release is published, use `npm link` or run `node /path/to/contextforge-ai/bin/contextforge.js` from your target project.
 
 ## Local dashboard
