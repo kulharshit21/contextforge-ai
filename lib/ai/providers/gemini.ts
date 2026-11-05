@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 
-import type { ProviderName } from "@/lib/memory/schemas";
+import type { ProviderName } from "../../memory/schemas";
 
 import type { AIProvider, GenerateInput, GenerateOutput } from "./mock";
 

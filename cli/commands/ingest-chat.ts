@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { extractMemoryFromChat } from "@/lib/ai";
-import { mergeExtractedMemory } from "@/lib/memory/engine";
+import { extractMemoryFromChat } from "../../lib/ai";
+import { mergeExtractedMemory } from "../../lib/memory/engine";
 
 export async function runIngestChatCommand(
   inputPath: string,

@@ -1,5 +1,5 @@
-import { scanRepository } from "@/lib/repo/scanner";
-import { writeRepoScan } from "@/lib/memory/engine";
+import { scanRepository } from "../../lib/repo/scanner";
+import { writeRepoScan } from "../../lib/memory/engine";
 
 export async function runScanCommand(workspaceRoot = process.cwd()) {
   const scan = await scanRepository(workspaceRoot);

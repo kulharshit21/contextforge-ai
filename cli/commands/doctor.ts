@@ -1,6 +1,6 @@
-import { analyzeMemoryDrift } from "@/lib/ai";
-import { calculateMemoryHealthScore } from "@/lib/memory/drift";
-import { loadMemoryFiles, readRepoScan } from "@/lib/memory/engine";
+import { analyzeMemoryDrift } from "../../lib/ai";
+import { calculateMemoryHealthScore } from "../../lib/memory/drift";
+import { loadMemoryFiles, readRepoScan } from "../../lib/memory/engine";
 
 export async function runDoctorCommand(workspaceRoot = process.cwd()) {
   const memoryFiles = await loadMemoryFiles(workspaceRoot);

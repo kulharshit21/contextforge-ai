@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { open, readFile, unlink, writeFile, rename, lstat } from "node:fs/promises";
 import path from "node:path";
 
-import { ensureDir, pathExists } from "@/lib/utils/fs";
+import { ensureDir, pathExists } from "../utils/fs";
 import {
   type JournalEvent,
   type JournalEventKind,

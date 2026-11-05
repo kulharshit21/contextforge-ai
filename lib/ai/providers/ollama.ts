@@ -1,5 +1,5 @@
-import { getOllamaBaseUrl } from "@/lib/utils/env";
-import type { ProviderName } from "@/lib/memory/schemas";
+import { getOllamaBaseUrl } from "../../utils/env";
+import type { ProviderName } from "../../memory/schemas";
 
 import type { AIProvider, GenerateInput, GenerateOutput } from "./mock";
 

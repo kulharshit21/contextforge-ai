@@ -1,4 +1,4 @@
-import { auditAllMemory } from "@/lib/memory/engine";
+import { auditAllMemory } from "../../lib/memory/engine";
 
 export type AuditCommandOptions = {
   verbose?: boolean;

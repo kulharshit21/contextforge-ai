@@ -1,8 +1,8 @@
-import { calculateMemoryHealthScore } from "@/lib/memory/drift";
-import { listSavedCapsules, loadMemoryFiles, readRepoScan } from "@/lib/memory/engine";
-import { auditJournal } from "@/lib/memory/journal";
-import { analyzeMemoryDrift } from "@/lib/ai";
-import { relativeDate } from "@/lib/utils/date";
+import { calculateMemoryHealthScore } from "../../lib/memory/drift";
+import { listSavedCapsules, loadMemoryFiles, readRepoScan } from "../../lib/memory/engine";
+import { auditJournal } from "../../lib/memory/journal";
+import { analyzeMemoryDrift } from "../../lib/ai";
+import { relativeDate } from "../../lib/utils/date";
 
 export async function runStatsCommand(workspaceRoot = process.cwd()) {
   const memoryFiles = await loadMemoryFiles(workspaceRoot);

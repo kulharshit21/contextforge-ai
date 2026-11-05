@@ -5,15 +5,15 @@ import path from "node:path";
 import matter from "gray-matter";
 import { simpleGit } from "simple-git";
 
-import { isoNow } from "@/lib/utils/date";
+import { isoNow } from "../utils/date";
 import {
   ensureDir,
   pathExists,
   readJsonIfExists,
   readTextIfExists,
   writeJsonPretty,
-} from "@/lib/utils/fs";
-import { slugify } from "@/lib/utils/slug";
+} from "../utils/fs";
+import { slugify } from "../utils/slug";
 
 import {
   appendJournalEvent,

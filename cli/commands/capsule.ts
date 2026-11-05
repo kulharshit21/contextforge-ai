@@ -1,6 +1,6 @@
-import { generateCapsuleFromMemory } from "@/lib/ai";
-import { loadMemoryFiles, readRepoScan, saveCapsule } from "@/lib/memory/engine";
-import { renderCapsuleMarkdown } from "@/lib/memory/capsule";
+import { generateCapsuleFromMemory } from "../../lib/ai";
+import { loadMemoryFiles, readRepoScan, saveCapsule } from "../../lib/memory/engine";
+import { renderCapsuleMarkdown } from "../../lib/memory/capsule";
 
 export async function runCapsuleCommand(task: string, workspaceRoot = process.cwd()) {
   const memoryFiles = await loadMemoryFiles(workspaceRoot);

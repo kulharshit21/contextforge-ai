@@ -1,4 +1,4 @@
-import type { ProviderName } from "@/lib/memory/schemas";
+import type { ProviderName } from "../../memory/schemas";
 
 export type GenerateInput = {
   systemPrompt?: string;
