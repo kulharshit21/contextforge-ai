@@ -7,12 +7,13 @@
     "contextforge": "./bin/contextforge.js"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
-    "start": "next start",
+    "start": "next start --hostname 127.0.0.1",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "contextforge": "node ./bin/contextforge.js"
+    "contextforge": "node ./bin/contextforge.js",
+    "test": "node --test tests/*.test.cjs"
   },
   "dependencies": {
     "@google/genai": "^1.51.0",
@@ -60,5 +61,21 @@
   },
   "engines": {
     "node": ">=20.0.0"
-  }
+  },
+  "keywords": [
+    "context-engineering",
+    "agent-memory",
+    "coding-agents",
+    "codex",
+    "cli",
+    "local-first"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kulharshit21/contextforge-ai.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kulharshit21/contextforge-ai/issues"
+  },
+  "homepage": "https://github.com/kulharshit21/contextforge-ai#readme"
 }
