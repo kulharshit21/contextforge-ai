@@ -49,6 +49,22 @@ For Windows PowerShell, platform-specific examples, additional commands, and out
 
 ## Use as an Agent Skill
 
+**Experimental one-command installation (Agent Skill only)**
+
+From the **project in which you want to use the skill**, with Node.js 22.20+ and Python 3.10+ installed:
+
+~~~bash
+npx skills add kulharshit21/contextforge-ai --skill contextforge-memory -a codex
+~~~
+
+Replace \`codex\` with a host supported by your installed [skills CLI](https://github.com/vercel-labs/skills), such as \`antigravity\` or \`claude-code\`. To inspect what would be discovered before installing:
+
+~~~bash
+npx skills add kulharshit21/contextforge-ai --list
+~~~
+
+This uses the **third-party skills installer** to copy/link the portable Python-based Agent Skill from GitHub. It does **not** install the ContextForge Node CLI, require localhost, publish an npm package, or guarantee automatic activation by your agent. Read the skill before running it, verify your agent recognizes it, and use explicit memory checkpoint/recall requests. Platform-by-platform installation verification is still pending; see [skill installation validation](docs/SKILL_INSTALL_VALIDATION.md).
+
 The portable skill is in [`.agents/skills/contextforge-memory/`](.agents/skills/contextforge-memory/). Copy that directory into your target repository's `.agents/skills/` directory (or the user-level skills directory supported by your agent). See its [SKILL.md](.agents/skills/contextforge-memory/SKILL.md) for how to invoke it.
 
 The companion script uses **Python 3.10+ and the standard library**. It can checkpoint and recover journal records without the Node.js CLI. **It does not automatically synchronize Python-written entries into the human-readable Markdown files**; see the [architecture notes](docs/ARCHITECTURE.md).
