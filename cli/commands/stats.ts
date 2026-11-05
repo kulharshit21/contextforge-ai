@@ -1,5 +1,6 @@
 import { calculateMemoryHealthScore } from "@/lib/memory/drift";
 import { listSavedCapsules, loadMemoryFiles, readRepoScan } from "@/lib/memory/engine";
+import { auditJournal } from "@/lib/memory/journal";
 import { analyzeMemoryDrift } from "@/lib/ai";
 import { relativeDate } from "@/lib/utils/date";
 
@@ -25,6 +26,13 @@ export async function runStatsCommand(workspaceRoot = process.cwd()) {
   console.log(`Approximate token savings: ${approximateSavings}`);
   console.log(`Drift warnings: ${analysis.issues.length}`);
   console.log(`Memory health score: ${calculateMemoryHealthScore(analysis.issues)}/100`);
+
+  try {
+    const journal = await auditJournal(workspaceRoot);
+    console.log(`Journal records: ${journal.totalRecords} (${journal.activeRecords} active)`);
+  } catch {
+    // journal not yet initialized or corrupt
+  }
 
   if (capsules[0]) {
     console.log(`Latest capsule: ${capsules[0].task} (${relativeDate(capsules[0].createdAt)})`);

@@ -16,13 +16,43 @@ export const MEMORY_FILE_KEYS = [
 export const PROVIDER_NAMES = ["gemini", "ollama", "mock"] as const;
 export const PRIVACY_MODES = ["local", "cloud"] as const;
 
+export const JOURNAL_EVENT_KINDS = [
+  "decision",
+  "fact",
+  "architecture",
+  "bug",
+  "blocker",
+  "next",
+  "test",
+  "handoff",
+] as const;
+
+export const CONTEXT_LEVELS = ["handoff", "capsule", "evidence"] as const;
+
 export type MemoryFileKey = (typeof MEMORY_FILE_KEYS)[number];
 export type ProviderName = (typeof PROVIDER_NAMES)[number];
 export type PrivacyMode = (typeof PRIVACY_MODES)[number];
+export type JournalEventKind = (typeof JOURNAL_EVENT_KINDS)[number];
+export type ContextLevel = (typeof CONTEXT_LEVELS)[number];
 
 export const MemoryFileKeySchema = z.enum(MEMORY_FILE_KEYS);
 export const ProviderNameSchema = z.enum(PROVIDER_NAMES);
 export const PrivacyModeSchema = z.enum(PRIVACY_MODES);
+export const JournalEventKindSchema = z.enum(JOURNAL_EVENT_KINDS);
+export const ContextLevelSchema = z.enum(CONTEXT_LEVELS);
+
+export const JournalEventSchema = z.object({
+  v: z.literal(1),
+  id: z.string().regex(/^[a-f0-9]{12}$/),
+  created_at: z.string(),
+  kind: JournalEventKindSchema,
+  text: z.string(),
+  source: z.string().default(""),
+  tags: z.array(z.string()).default([]),
+  supersedes: z.string().default(""),
+  previous: z.string(),
+  digest: z.string(),
+});
 
 export const MemoryItemSchema = z.object({
   id: z.string(),
@@ -153,6 +183,7 @@ export const ProjectRecordSchema = z.object({
   settings: ProjectSettingsSchema,
 });
 
+export type JournalEvent = z.infer<typeof JournalEventSchema>;
 export type MemoryItem = z.infer<typeof MemoryItemSchema>;
 export type MemoryFile = z.infer<typeof MemoryFileSchema>;
 export type RepoScan = z.infer<typeof RepoScanSchema>;

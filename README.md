@@ -9,53 +9,32 @@
 
 **Project status:** early-stage open-source MVP. The repository contains a local CLI, dashboard, mock/offline functionality, and CI checks. It is **not yet published to npm**. Some features described in the roadmap are proposals, not shipped features.
 
-## Agent skill: local memory checkpoints and context recovery
+## Unified memory architecture
 
-**New experimental capability:** a portable, open-format agent skill at
+ContextForge combines two synchronized storage formats:
+
+1. **Append-only journal (`.contextforge/agent-memory/events.jsonl`)**: A tamper-evident, SHA-256 hash-chained ledger storing discrete decisions, bugs, tests, blockers, next steps, facts, and handoffs with Git SHA and file anchors.
+2. **Structured Markdown (`.contextforge/*.md`)**: Human-readable, versioned documents (`DECISIONS.md`, `ARCHITECTURE.md`, `CURRENT_TASKS.md`, `BUGS_AND_FIXES.md`, etc.) for direct editing and agent indexing.
+
+Both the TypeScript Node CLI and the zero-dependency Python Agent Skill share the exact same hash-chain contract and storage format. A checkpoint made in the CLI is immediately verifiable by the Python skill, and vice versa.
+
+### Agent skill: local memory checkpoints and context recovery
+
+A portable, open-format agent skill is located at
 [.agents/skills/contextforge-memory/SKILL.md](.agents/skills/contextforge-memory/SKILL.md).
 
-It works as an optional, offline companion to the existing CLI. An AI coding agent can use this skill to:
+An AI coding agent can use this skill to:
 
 - record compact **decisions, test outcomes, bugs, blockers, and next actions** with evidence references;
-- recover the most relevant records for a new task within an explicit context budget;
+- recover task-relevant records via tiered context budgets (`handoff`, `capsule`, or `evidence`);
 - preserve corrections without silently changing earlier history;
-- verify the local append-only journal for accidental corruption.
+- verify and repair the local append-only journal after interrupted sessions.
 
 It does **not** intercept or replace built-in AI compaction, autonomously monitor all chats, or claim better benchmark performance than native model memory. Its retrieval is deterministic and keyword-based; agent-written notes still need verification.
 
-### Use in a repository (Codex or compatible Agent Skills host)
+### Quick start (CLI)
 
-1. Clone ContextForge, then copy its .agents/skills/contextforge-memory folder into **your target repository's** .agents/skills folder. Alternatively, copy it into your user's ~/.agents/skills folder. Consult the agent's skill discovery documentation.
-2. Open the target repository with a compatible agent, and request the **contextforge-memory** skill explicitly if the agent does not select it automatically.
-3. The skill uses Python 3.10+ with no third-party Python packages or external API calls.
-
-~~~bash
-python .agents/skills/contextforge-memory/scripts/contextforge_memory.py --root . init
-python .agents/skills/contextforge-memory/scripts/contextforge_memory.py --root . save --kind decision --text "Use local Markdown as the source of truth" --source "docs/ARCHITECTURE.md"
-python .agents/skills/contextforge-memory/scripts/contextforge_memory.py --root . save --kind next --text "Add a regression test for Windows CLI"
-python .agents/skills/contextforge-memory/scripts/contextforge_memory.py --root . recall --task "Windows CLI testing" --budget-chars 2500
-python .agents/skills/contextforge-memory/scripts/contextforge_memory.py --root . audit
-~~~
-
-Run those paths from the target repository when it contains the copied skill. Use a suitable absolute skill script path if installed at user scope. For private notes, prefer piping reviewed text to the save command using --stdin to avoid command-line history. **Never send secrets or confidential data to the memory log.** Local notes are ignored under .contextforge/ by default.
-
-Read [design and limitations](.agents/skills/contextforge-memory/references/design.md). The existing Node/TypeScript CLI and web dashboard continue to work independently.
-
-## What works today
-
-- Initialize ten structured Markdown memory files inside any working directory.
-- Preserve human-entered notes and extract candidate memories from a text conversation.
-- Scan project structure and Git facts, excluding common secret and binary patterns.
-- Generate a task-focused capsule and check saved context for drift.
-- Export instructions for AGENTS.md, CLAUDE.md, GEMINI.md, Cursor, and Copilot.
-- Explore an optional local Next.js dashboard with seeded demo data.
-- Use the deterministic **mock mode** without an API key or credit card.
-
-A scan is a structured metadata snapshot, **not** a full semantic code audit. Mock-mode extraction uses heuristics; review generated memories before trusting them. The exported MCP manifest is not an implemented MCP server.
-
-## Quick start (CLI)
-
-**Requirements:** Node.js 24 (CI target), npm, and Git for full repository metadata. Linux, macOS, and Windows are intended targets.
+**Requirements:** Node.js 24 (CI target), npm, and Git for full repository metadata. Linux, macOS, and Windows are supported.
 
 ~~~bash
 git clone https://github.com/kulharshit21/contextforge-ai.git
@@ -70,17 +49,20 @@ Now run the linked CLI from a **different project directory** (not the ContextFo
 ~~~bash
 cd /path/to/your-project
 contextforge init
-contextforge remember "Decision: store project configuration in version control, never API secrets."
+contextforge checkpoint "Selected SQLite for local storage" --kind decision --source docs/ARCHITECTURE.md
+contextforge checkpoint "Blocker: need Windows CI test" --kind blocker
+contextforge recall --level handoff --budget-chars 1500
 contextforge scan
 contextforge capsule "Add robust error handling"
 contextforge doctor
+contextforge audit --verbose
 contextforge export --all
 contextforge stats
 ~~~
 
-On Windows, replace the example directory with the path to your target project in PowerShell. The command runs in the directory from which you invoke it and creates local files under that project's .contextforge/ folder. Export refuses to overwrite existing instruction files by default. **Review and back up files before passing --force**.
+On Windows, replace the example directory with the path to your target project in PowerShell. The command runs in the directory from which you invoke it and creates local files under that project's `.contextforge/` folder. Export refuses to overwrite existing instruction files by default. **Review and back up files before passing `--force`**.
 
-**Why not npx?** This package is currently marked private and is not published. Do not use the unverified command npx contextforge from the public npm registry. Until an audited package release is published, use npm link or run node /path/to/contextforge-ai/bin/contextforge.js from your target project.
+**Why not npx?** This package is currently marked private and is not published. Do not use the unverified command `npx contextforge` from the public npm registry. Until an audited package release is published, use `npm link` or run `node /path/to/contextforge-ai/bin/contextforge.js` from your target project.
 
 ## Local dashboard
 
@@ -98,24 +80,29 @@ With no cloud credentials, you can explore the seeded demo and local workspace. 
 
 | Command | Purpose |
 | --- | --- |
-| contextforge init | Initialize structured local memory |
-| contextforge remember "note" | Store a note in an inferred section |
-| contextforge ingest-chat ./notes.txt | Extract memory from local text |
-| contextforge scan | Refresh repository metadata |
-| contextforge capsule "task" | Save a task-specific context capsule |
-| contextforge doctor | Report likely inconsistencies or drift |
-| contextforge export --all | Generate agent instructions without overwriting existing files; --force allows intentional replacement |
-| contextforge stats | Inspect local workspace summary |
-| contextforge ui | Show dashboard startup steps |
+| `contextforge init` | Initialize structured local memory and append-only event journal |
+| `contextforge checkpoint <text>` | Save a typed, provenance-backed memory checkpoint (synced to Markdown) |
+| `contextforge recall [task]` | Restore task context across tiers: `--level handoff\|capsule\|evidence` |
+| `contextforge audit` | Validate hash-chain integrity, kind breakdown, and lock status |
+| `contextforge repair` | Safely recover from crashed writes or stale locks with timestamped `.bak` |
+| `contextforge sync` | Synchronize Markdown memory files with the event journal |
+| `contextforge remember "note"` | Store a note in an inferred section and journal |
+| `contextforge ingest-chat ./notes.txt` | Extract memory from local text |
+| `contextforge scan` | Refresh repository metadata and Git facts |
+| `contextforge capsule "task"` | Save a task-specific context capsule |
+| `contextforge doctor` | Report likely inconsistencies or drift |
+| `contextforge export --all` | Generate agent instructions without overwriting existing files; `--force` allows intentional replacement |
+| `contextforge stats` | Inspect local workspace summary and journal counts |
+| `contextforge ui` | Show dashboard startup steps |
 
 ## Design and privacy
 
-- The source of truth is local Markdown under .contextforge/.
+- The source of truth is local Markdown under `.contextforge/` and verified journal events.
 - The default provider is mock; no remote LLM is required.
-- CONTEXTFORGE_PRIVACY_MODE=local blocks Gemini through the provider resolver.
-- To intentionally use a cloud model, review data handling and set CONTEXTFORGE_PRIVACY_MODE=cloud plus provider credentials. **Do not upload private source or chats without permission.**
+- `CONTEXTFORGE_PRIVACY_MODE=local` blocks Gemini through the provider resolver.
+- To intentionally use a cloud model, review data handling and set `CONTEXTFORGE_PRIVACY_MODE=cloud` plus provider credentials. **Do not upload private source or chats without permission.**
 - Repo scans may include paths, Git author names, and commit messages. Inspect them before sharing.
-- Files in .contextforge/, workspaces/, and local environment files are ignored by Git by default.
+- Files in `.contextforge/`, `workspaces/`, and local environment files are ignored by Git by default.
 
 See [.env.example](.env.example), [architecture](docs/ARCHITECTURE.md), [demo walkthrough](docs/README_DEMO.md), and [security policy](SECURITY.md).
 
@@ -127,9 +114,10 @@ npm run typecheck
 npm run lint
 npm test
 npm run build
+python -m unittest discover -s tests -p "test_*.py" -v
 ~~~
 
-CI runs these checks plus a CLI smoke test. A green status applies only to the current commit; see GitHub Actions for evidence. Test coverage and external-user validation will grow over time.
+CI runs these checks plus a CLI smoke test across Linux, macOS, and Windows. A green status applies only to the current commit; see GitHub Actions for evidence.
 
 ## Contribute
 
