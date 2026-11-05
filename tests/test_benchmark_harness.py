@@ -1,7 +1,13 @@
-"""Regression checks for fair source-string budgeting in synthetic baselines."""
+"""Regression checks for benchmark harness, baselines, and supersession links."""
+import tempfile
 import unittest
+from pathlib import Path
 
-from benchmarks.run_benchmark import baseline_recency, baseline_uniform
+from benchmarks.run_benchmark import (
+    baseline_recency,
+    baseline_uniform,
+    setup_workspace,
+)
 
 
 class BenchmarkBaselineTests(unittest.TestCase):
@@ -38,6 +44,29 @@ class BenchmarkBaselineTests(unittest.TestCase):
             text, selected, _ = method(self.events, 40)
             self.assertLessEqual(len(text), 40)
             self.assertFalse(selected)
+
+    def test_setup_workspace_chains_and_links_superseded_events(self):
+        scenario = {
+            "events": [
+                {
+                    "kind": "decision",
+                    "text": "Old plan to use in-memory store",
+                    "source": "docs/ARCH.md",
+                },
+                {
+                    "kind": "decision",
+                    "text": "Adopt SQLite disk journal",
+                    "source": "docs/ARCH.md",
+                    "supersedes_event_idx": 0,
+                },
+            ]
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            events = setup_workspace(scenario, Path(tmpdir))
+            self.assertEqual(len(events), 2)
+            self.assertIsNone(events[0]["supersedes"])
+            self.assertEqual(events[1]["supersedes"], "000000000001")
+            self.assertEqual(events[1]["previous"], events[0]["digest"])
 
 
 if __name__ == "__main__":

@@ -42,6 +42,12 @@ def setup_workspace(scenario: dict, temp_dir: Path) -> List[dict]:
     for idx, raw in enumerate(scenario["events"]):
         t_sec = t0 + (idx * 3600)
         timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t_sec))
+        supersedes_id = None
+        if "supersedes_event_idx" in raw:
+            supersedes_id = f"{raw['supersedes_event_idx']+1:012x}"
+        elif raw.get("supersedes"):
+            supersedes_id = raw["supersedes"]
+
         event = {
             "v": 1,
             "id": f"{idx+1:012x}",
@@ -50,7 +56,7 @@ def setup_workspace(scenario: dict, temp_dir: Path) -> List[dict]:
             "text": raw["text"],
             "source": raw.get("source"),
             "tags": raw.get("tags", []),
-            "supersedes": None,
+            "supersedes": supersedes_id,
             "previous": prev_digest,
         }
         event["digest"] = compute_digest(event)
@@ -289,8 +295,8 @@ def run_benchmark(budget: int = 1200) -> Dict[str, Any]:
                 })
 
     # Compile Summary Table
-    print(f"{'Method':<25} | {'Recall (95% CI)':<20} | {'Stale Leak':<12} | {'Payload strs.':<12} | {'Citation %':<12} | {'Latency (ms)':<12}")
-    print("-" * 105)
+    print(f"{'Method':<25} | {'Recall (95% CI)':<20} | {'Stale Leak':<12} | {'Suspicious text*':<17} | {'Citation %':<12} | {'Latency (ms)':<12}")
+    print("-" * 110)
 
     summary_stats = {}
     for method, metrics in results["methods"].items():
@@ -305,14 +311,16 @@ def run_benchmark(budget: int = 1200) -> Dict[str, Any]:
             "recall_ci95": ci_rec,
             "stale_leak_mean": mean_stale,
             "total_injections_leaked": total_inj,
+            "suspicious_payloads_emitted": total_inj,
             "citation_rate_mean": mean_cit,
             "latency_mean_ms": mean_lat,
         }
 
-        print(f"{method:<25} | {mean_rec*100:5.1f}% (±{ci_rec*100:4.1f}%)   | {mean_stale*100:5.1f}%      | {total_inj:<12} | {mean_cit*100:5.1f}%      | {mean_lat:6.1f} ms")
+        print(f"{method:<25} | {mean_rec*100:5.1f}% (+/-{ci_rec*100:4.1f}%) | {mean_stale*100:5.1f}%      | {total_inj:<17} | {mean_cit*100:5.1f}%      | {mean_lat:6.1f} ms")
 
     results["summary"] = summary_stats
-    print("-" * 105)
+    print("-" * 110)
+    print("* Suspicious text counts verbatim appearances of adversary test phrases in retrieved text; does not measure agent vulnerability to execution.")
     print(f"Total negative/neutral cases: {len(results['negative_cases'])}/{len(scenarios)}")
     for nc in results["negative_cases"]:
         print(f"  * {nc['id']} ({nc['domain']}): CF={nc['cf_recall']*100:.0f}% vs Recency={nc['recency_recall']*100:.0f}%")

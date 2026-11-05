@@ -146,12 +146,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Optimized SVG icons in dashboard sidebar to reduce bundle size",
-        "source": "lib/security/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for security and adopted verified architecture",
+        "source": "lib/security/decisions.ts",
         "tags": [
-          "security"
-        ]
+          "security",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -398,12 +400,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Refactored plan tier enum from string literals to TypeScript const object",
-        "source": "lib/billing/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for billing and adopted verified architecture",
+        "source": "lib/billing/decisions.ts",
         "tags": [
-          "billing"
-        ]
+          "billing",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -650,12 +654,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Added graceful connection drain on SIGINT signal",
-        "source": "lib/networking/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for networking and adopted verified architecture",
+        "source": "lib/networking/decisions.ts",
         "tags": [
-          "networking"
-        ]
+          "networking",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -902,12 +908,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Added telemetry gauge for active and idle pool connection counts",
-        "source": "lib/database/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for database and adopted verified architecture",
+        "source": "lib/database/decisions.ts",
         "tags": [
-          "database"
-        ]
+          "database",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -1153,12 +1161,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Added fallback to PostgreSQL trigram search when Elasticsearch is unreachable",
-        "source": "lib/search/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for search and adopted verified architecture",
+        "source": "lib/search/decisions.ts",
         "tags": [
-          "search"
-        ]
+          "search",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -1405,12 +1415,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/graphql/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for graphql and adopted verified architecture",
+        "source": "lib/graphql/decisions.ts",
         "tags": [
-          "graphql"
-        ]
+          "graphql",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -1657,12 +1669,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/devops/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for devops and adopted verified architecture",
+        "source": "lib/devops/decisions.ts",
         "tags": [
-          "devops"
-        ]
+          "devops",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -1909,12 +1923,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/security/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for security and adopted verified architecture",
+        "source": "lib/security/decisions.ts",
         "tags": [
-          "security"
-        ]
+          "security",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -2161,12 +2177,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/concurrency/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for concurrency and adopted verified architecture",
+        "source": "lib/concurrency/decisions.ts",
         "tags": [
-          "concurrency"
-        ]
+          "concurrency",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -2413,12 +2431,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/database/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for database and adopted verified architecture",
+        "source": "lib/database/decisions.ts",
         "tags": [
-          "database"
-        ]
+          "database",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -2665,12 +2685,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/cloud/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for cloud and adopted verified architecture",
+        "source": "lib/cloud/decisions.ts",
         "tags": [
-          "cloud"
-        ]
+          "cloud",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -2917,12 +2939,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/security/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for security and adopted verified architecture",
+        "source": "lib/security/decisions.ts",
         "tags": [
-          "security"
-        ]
+          "security",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -3169,12 +3193,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/streaming/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for streaming and adopted verified architecture",
+        "source": "lib/streaming/decisions.ts",
         "tags": [
-          "streaming"
-        ]
+          "streaming",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -3421,12 +3447,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/frontend/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for frontend and adopted verified architecture",
+        "source": "lib/frontend/decisions.ts",
         "tags": [
-          "frontend"
-        ]
+          "frontend",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -3673,12 +3701,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/database/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for database and adopted verified architecture",
+        "source": "lib/database/decisions.ts",
         "tags": [
-          "database"
-        ]
+          "database",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -3925,12 +3955,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/networking/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for networking and adopted verified architecture",
+        "source": "lib/networking/decisions.ts",
         "tags": [
-          "networking"
-        ]
+          "networking",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -4177,12 +4209,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/security/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for security and adopted verified architecture",
+        "source": "lib/security/decisions.ts",
         "tags": [
-          "security"
-        ]
+          "security",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -4429,12 +4463,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/performance/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for performance and adopted verified architecture",
+        "source": "lib/performance/decisions.ts",
         "tags": [
-          "performance"
-        ]
+          "performance",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -4681,12 +4717,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/performance/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for performance and adopted verified architecture",
+        "source": "lib/performance/decisions.ts",
         "tags": [
-          "performance"
-        ]
+          "performance",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -4933,12 +4971,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/database/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for database and adopted verified architecture",
+        "source": "lib/database/decisions.ts",
         "tags": [
-          "database"
-        ]
+          "database",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -5185,12 +5225,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/security/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for security and adopted verified architecture",
+        "source": "lib/security/decisions.ts",
         "tags": [
-          "security"
-        ]
+          "security",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -5437,12 +5479,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/resilience/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for resilience and adopted verified architecture",
+        "source": "lib/resilience/decisions.ts",
         "tags": [
-          "resilience"
-        ]
+          "resilience",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -5689,12 +5733,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/security/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for security and adopted verified architecture",
+        "source": "lib/security/decisions.ts",
         "tags": [
-          "security"
-        ]
+          "security",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -5941,12 +5987,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/database/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for database and adopted verified architecture",
+        "source": "lib/database/decisions.ts",
         "tags": [
-          "database"
-        ]
+          "database",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -6193,12 +6241,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/database/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for database and adopted verified architecture",
+        "source": "lib/database/decisions.ts",
         "tags": [
-          "database"
-        ]
+          "database",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -6445,12 +6495,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/testing/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for testing and adopted verified architecture",
+        "source": "lib/testing/decisions.ts",
         "tags": [
-          "testing"
-        ]
+          "testing",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -6697,12 +6749,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/architecture/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for architecture and adopted verified architecture",
+        "source": "lib/architecture/decisions.ts",
         "tags": [
+          "architecture",
           "architecture"
-        ]
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -6949,12 +7003,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/security/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for security and adopted verified architecture",
+        "source": "lib/security/decisions.ts",
         "tags": [
-          "security"
-        ]
+          "security",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -7201,12 +7257,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/security/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for security and adopted verified architecture",
+        "source": "lib/security/decisions.ts",
         "tags": [
-          "security"
-        ]
+          "security",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
@@ -7453,12 +7511,14 @@
         "is_injection": true
       },
       {
-        "kind": "fact",
-        "text": "Updated GitHub action workflow node version matrix to include Node 24",
-        "source": "lib/devops/adapters.ts",
+        "kind": "decision",
+        "text": "Superseded earlier exploratory plan for devops and adopted verified architecture",
+        "source": "lib/devops/decisions.ts",
         "tags": [
-          "devops"
-        ]
+          "devops",
+          "architecture"
+        ],
+        "supersedes_event_idx": 7
       },
       {
         "kind": "blocker",
