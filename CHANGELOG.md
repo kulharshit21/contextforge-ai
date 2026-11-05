@@ -4,6 +4,13 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Refined benchmark evaluation methodology and addressed issue #28:
+  - Ensured fair baseline source accounting by formatting and budgeting `(source: ...)` within baseline character allocations, eliminating artificial 0% citation rates (recency now achieves 58.7% and uniform achieves 76.7% source-string presence at 1,200 chars).
+  - Implemented explicit superseding links (`supersedes_event_idx`) across multi-session fixtures and verified active hash-chain record invalidation during retrieval.
+  - Renamed injection leakage metric to `suspicious_payloads_emitted` ("Suspicious text") with clear documentation that exact keyword matching does not measure agent vulnerability to execution.
+  - Added unit test coverage for benchmark harness workspace creation and supersession linking in `tests/test_benchmark_harness.py`.
+  - Updated `docs/BENCHMARK_RESULTS.md` with updated empirical results, negative case analyses (2/30 cases), and honest scope definitions.
+
 - Added Agent Skill lifecycle commands (`contextforge skill status`, `install`, `uninstall`):
   - `status`: inspects whether `contextforge-memory` is installed project-locally or globally, verifies presence of `SKILL.md`, Python companion script, and design references, and detects Python 3 runtime availability.
   - `install`: installs the portable skill into `.agents/skills/contextforge-memory` (or user-global `~/.agents/skills/`), enforcing overwrite protection unless `--force` is supplied.
