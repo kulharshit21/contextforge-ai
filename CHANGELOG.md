@@ -4,6 +4,12 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Cross-platform quickstart verification on Windows 11 and macOS (issue #12):
+  - Executed end-to-end disposable project walkthrough on Windows 11 (PowerShell, Node 24) verifying `init`, `checkpoint`, `remember`, `recall`, `audit`, `scan`, `doctor`, `capsule`, and `export`.
+  - Confirmed deterministic output paths, expected exit codes, and overwrite protection behavior for `AGENTS.md`.
+  - Authored `docs/platforms/WINDOWS_VERIFICATION.md` and `docs/platforms/MACOS_VERIFICATION.md` with sanitized terminal logs, process liveness details, and filesystem case-sensitivity notes.
+  - Linked platform verification docs in `README.md`.
+
 - Reproducible context-retention benchmark against equal-budget baselines (issue #17):
   - Curated 30 held-out multi-session engineering scenarios in `benchmarks/fixtures/tasks.json` with human-verified gold facts across 15 technical domains.
   - Built standalone evaluator `benchmarks/run_benchmark.py` testing critical-fact recall (with 95% confidence intervals), evidence citation fidelity, injection resistance, stale info leakage, and retrieval latency against naive recency truncation and uniform sampling under identical character budgets.
