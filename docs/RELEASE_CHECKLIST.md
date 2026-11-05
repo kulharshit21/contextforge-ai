@@ -6,6 +6,7 @@ This document describes checks **before** declaring an official release. Do not 
 - [x] Independently verify Windows, macOS, and Linux installation using supported Node versions.
 - [x] Ensure no generated agent instruction files unexpectedly overwrite user work (`export` overwrite guard).
 - [x] Confirm package licensing (MIT) and dependency redistribution terms.
+- [ ] Resolve current high-severity Next.js advisory and verify deployed runtime before a public release ([issue #32](https://github.com/kulharshit21/contextforge-ai/issues/32)).
 - [x] Filter the CLI as an installable artifact; do not publish the private Next.js application by accident (`"files"` whitelist in `package.json` reducing tarball from 143 files to 51 files).
 - [x] Standardize on relative module imports across `cli/` and `lib/` so installed packages inside `node_modules` do not require tsconfig path interception.
 - [x] Move runtime loader dependencies (`tsx`) into production `dependencies`.
