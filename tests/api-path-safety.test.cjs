@@ -303,3 +303,136 @@ test("scan boundary blocks symlinked parents, direct symlinks, and internal syml
     "scan symlink script failed:\n" + result.stdout + "\n" + result.stderr);
   assert.match(result.stdout, /scan symlink (checks passed|checks skipped)/);
 });
+
+// Verifies that direct file reads (README.md, package.json, .contextforgeignore)
+// refuse symlinks instead of following them outside the validated root, and
+// that git metadata is only read from a real .git directory inside the root —
+// a symlinked `.git` or a worktree-style `.git` file with a gitdir pointer to
+// another repository must not disclose that repository's branch or history.
+const SCAN_DIRECT_READ_SCRIPT = [
+  'import assert from "node:assert/strict";',
+  'import fs from "node:fs";',
+  'import path from "node:path";',
+  'import { pathToFileURL } from "node:url";',
+  '',
+  'const repoRoot = process.env.CONTEXTFORGE_REPO_ROOT;',
+  'const outsideDir = process.env.CONTEXTFORGE_OUTSIDE_DIR;',
+  'const outsideRepo = process.env.CONTEXTFORGE_OUTSIDE_REPO;',
+  'const projectsUrl = pathToFileURL(path.join(repoRoot, "lib", "server", "projects.ts")).href;',
+  'const { createProject, runProjectScan } = await import(projectsUrl);',
+  '',
+  '// 1. Positive control: regular README and package.json are read normally.',
+  'const benignRoot = path.join(process.cwd(), "direct-benign-root");',
+  'fs.mkdirSync(benignRoot, { recursive: true });',
+  'fs.writeFileSync(path.join(benignRoot, "README.md"), "# BENIGN-README content");',
+  'fs.writeFileSync(path.join(benignRoot, "package.json"),',
+  '  JSON.stringify({ name: "benign-direct", scripts: { build: "echo BENIGN" } }));',
+  'const benign = await createProject({ name: "direct-benign", description: "", localPathHint: benignRoot });',
+  'const benignScan = await runProjectScan(benign.id);',
+  'assert.match(benignScan.readme_summary, /BENIGN-README/);',
+  'assert.equal(benignScan.scripts.build, "echo BENIGN");',
+  '',
+  '// 2. Symlinked README.md and package.json must not disclose outside content.',
+  'let canSymlinkFiles = true;',
+  'const symlinkRoot = path.join(process.cwd(), "direct-symlink-root");',
+  'fs.mkdirSync(symlinkRoot, { recursive: true });',
+  'try {',
+  '  fs.symlinkSync(path.join(outsideDir, "README.md"), path.join(symlinkRoot, "README.md"), "file");',
+  '  fs.symlinkSync(path.join(outsideDir, "package.json"), path.join(symlinkRoot, "package.json"), "file");',
+  '} catch (error) {',
+  '  if (error && ["EPERM", "EACCES", "ENOSYS"].includes(error.code)) canSymlinkFiles = false;',
+  '  else throw error;',
+  '}',
+  'if (canSymlinkFiles) {',
+  '  const leaky = await createProject({ name: "direct-symlink", description: "", localPathHint: symlinkRoot });',
+  '  const leakyScan = await runProjectScan(leaky.id);',
+  '  assert.ok(!JSON.stringify(leakyScan).includes("OUTSIDE-README-MARKER"),',
+  '    "symlinked README must not leak outside content");',
+  '  assert.ok(!JSON.stringify(leakyScan).includes("OUTSIDE-SCRIPT-MARKER"),',
+  '    "symlinked package.json must not leak outside scripts");',
+  '}',
+  '',
+  '// 3. A symlinked `.git` (junction on Windows) must not report outside git facts.',
+  'const gitSymlinkRoot = path.join(process.cwd(), "direct-gitsymlink-root");',
+  'fs.mkdirSync(gitSymlinkRoot, { recursive: true });',
+  'fs.writeFileSync(path.join(gitSymlinkRoot, "README.md"), "# git symlink probe\\n");',
+  'fs.symlinkSync(path.join(outsideRepo, ".git"), path.join(gitSymlinkRoot, ".git"),',
+  '  process.platform === "win32" ? "junction" : "dir");',
+  'const gitSymlink = await createProject({ name: "direct-gitsymlink", description: "",',
+  '  localPathHint: gitSymlinkRoot });',
+  'const gitSymlinkScan = await runProjectScan(gitSymlink.id);',
+  'assert.equal(gitSymlinkScan.commit_hash, "unknown");',
+  'assert.deepEqual(gitSymlinkScan.recent_commits, []);',
+  'assert.ok(!JSON.stringify(gitSymlinkScan).includes("OUTSIDE-GIT-MARKER"));',
+  '',
+  '// 4. A worktree-style `.git` file with an outside gitdir must not leak history.',
+  'const gitFileRoot = path.join(process.cwd(), "direct-gitfile-root");',
+  'fs.mkdirSync(gitFileRoot, { recursive: true });',
+  'fs.writeFileSync(path.join(gitFileRoot, ".git"), "gitdir: " + path.join(outsideRepo, ".git") + "\\n");',
+  'const gitFile = await createProject({ name: "direct-gitfile", description: "",',
+  '  localPathHint: gitFileRoot });',
+  'const gitFileScan = await runProjectScan(gitFile.id);',
+  'assert.equal(gitFileScan.commit_hash, "unknown");',
+  'assert.deepEqual(gitFileScan.recent_commits, []);',
+  'assert.ok(!JSON.stringify(gitFileScan).includes("OUTSIDE-GIT-MARKER"));',
+  '',
+  '// 5. Positive control: a real .git directory still reports git facts.',
+  'if (process.env.CONTEXTFORGE_GIT_AVAILABLE === "1") {',
+  '  const { spawnSync } = await import("node:child_process");',
+  '  const realGitRoot = path.join(process.cwd(), "direct-realgit-root");',
+  '  fs.mkdirSync(realGitRoot, { recursive: true });',
+  '  const runGit = (...args) => spawnSync("git", args, { encoding: "utf8" });',
+  '  runGit("-C", realGitRoot, "init");',
+  '  runGit("-C", realGitRoot, "config", "user.email", "probe@example.com");',
+  '  runGit("-C", realGitRoot, "config", "user.name", "Probe");',
+  '  fs.writeFileSync(path.join(realGitRoot, "README.md"), "# Real git facts control\\n");',
+  '  runGit("-C", realGitRoot, "add", ".");',
+  '  runGit("-C", realGitRoot, "commit", "-m", "REAL-GIT-FACTS-CONTROL commit");',
+  '  if (runGit("-C", realGitRoot, "rev-parse", "HEAD").status === 0) {',
+  '    const real = await createProject({ name: "direct-realgit", description: "",',
+  '      localPathHint: realGitRoot });',
+  '    const realScan = await runProjectScan(real.id);',
+  '    assert.equal(realScan.commit_hash.length, 40);',
+  '    assert.ok(realScan.recent_commits.length >= 1);',
+  '  }',
+  '}',
+  '',
+  'console.log("scan direct-read checks passed");',
+].join("\n");
+
+test("scan direct reads refuse symlinks and .git indirection keeps git facts local", (t) => {
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "contextforge-direct-out-"));
+  t.after(() => fs.rmSync(outsideDir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(outsideDir, "README.md"), "# OUTSIDE-README-MARKER secret readme beyond the boundary\n");
+  fs.writeFileSync(
+    path.join(outsideDir, "package.json"),
+    JSON.stringify({ name: "outside-secret-pkg", scripts: { preinstall: "echo OUTSIDE-SCRIPT-MARKER" } }),
+  );
+
+  const outsideRepo = fs.mkdtempSync(path.join(os.tmpdir(), "contextforge-direct-git-"));
+  t.after(() => fs.rmSync(outsideRepo, { recursive: true, force: true }));
+  let gitAvailable = false;
+  try {
+    const runGit = (...args) => spawnSync("git", args, { encoding: "utf8" });
+    if (runGit("--version").status === 0) {
+      gitAvailable = true;
+      runGit("-C", outsideRepo, "init");
+      runGit("-C", outsideRepo, "config", "user.email", "probe@example.com");
+      runGit("-C", outsideRepo, "config", "user.name", "Probe");
+      fs.writeFileSync(path.join(outsideRepo, "secret.txt"), "outside repo file\n");
+      runGit("-C", outsideRepo, "add", ".");
+      runGit("-C", outsideRepo, "commit", "-m", "OUTSIDE-GIT-MARKER secret commit message");
+    }
+  } catch {
+    gitAvailable = false;
+  }
+
+  const { result } = runTsxScript(t, "scan-direct-read.mts", SCAN_DIRECT_READ_SCRIPT, {
+    CONTEXTFORGE_OUTSIDE_DIR: outsideDir,
+    CONTEXTFORGE_OUTSIDE_REPO: outsideRepo,
+    CONTEXTFORGE_GIT_AVAILABLE: gitAvailable ? "1" : "0",
+  });
+  assert.equal(result.status, 0,
+    "scan direct-read script failed:\n" + result.stdout + "\n" + result.stderr);
+  assert.match(result.stdout, /scan direct-read checks passed/);
+});

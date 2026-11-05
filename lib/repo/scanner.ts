@@ -1,11 +1,11 @@
-import { realpath, stat } from "node:fs/promises";
+import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 
 import fg from "fast-glob";
 import { simpleGit } from "simple-git";
 
 import { isoNow } from "../utils/date";
-import { pathExists, readJsonIfExists, readTextIfExists } from "../utils/fs";
+import { pathExists } from "../utils/fs";
 
 import { RepoScanSchema, type RepoScan } from "../memory/schemas";
 
@@ -66,10 +66,30 @@ async function filterToRootFiles(workspaceRoot: string, relativePaths: string[])
   return kept;
 }
 
-async function readIgnorePatterns(workspaceRoot: string) {
-  const ignoreFilePath = path.join(workspaceRoot, ".contextforgeignore");
-  const content = await readTextIfExists(ignoreFilePath);
+// Direct reads must not follow symlinks out of the scan root: a symlinked
+// README.md or package.json would otherwise disclose outside file content
+// even when the root itself is canonically validated. Symlinks are refused
+// uniformly, consistent with the journal and skill-lifecycle policies.
+async function readRegularFileIfExists(workspaceRoot: string, filename: string): Promise<string | null> {
+  const filePath = path.join(workspaceRoot, filename);
+  let stats;
+  try {
+    stats = await lstat(filePath);
+  } catch {
+    return null;
+  }
+  if (stats.isSymbolicLink() || !stats.isFile()) {
+    return null;
+  }
+  try {
+    return await readFile(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
 
+async function readIgnorePatterns(workspaceRoot: string) {
+  const content = await readRegularFileIfExists(workspaceRoot, ".contextforgeignore");
   if (!content) {
     return [];
   }
@@ -121,14 +141,50 @@ function detectFramework(packageJson: Record<string, unknown> | null, files: str
 
 async function summarizeReadme(workspaceRoot: string) {
   const readme =
-    (await readTextIfExists(path.join(workspaceRoot, "README.md"))) ??
-    (await readTextIfExists(path.join(workspaceRoot, "readme.md"))) ??
+    (await readRegularFileIfExists(workspaceRoot, "README.md")) ??
+    (await readRegularFileIfExists(workspaceRoot, "readme.md")) ??
     "";
 
   return readme.replace(/\s+/g, " ").trim().slice(0, 800);
 }
 
+// Git metadata can point outside the scan root through a symlinked `.git` or
+// a worktree-style `.git` file with a `gitdir:` path to another repository;
+// git would then disclose that repository's branch and history. Only trust
+// git facts when `.git` is a real directory resolving inside the canonical
+// root. Worktree checkouts (whose `.git` is a file) therefore report unknown
+// git facts, which is the safe default for an informational scan.
+async function hasContainedGitDirectory(workspaceRoot: string): Promise<boolean> {
+  const gitPath = path.join(workspaceRoot, ".git");
+  let stats;
+  try {
+    stats = await lstat(gitPath);
+  } catch {
+    return false;
+  }
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    return false;
+  }
+  try {
+    const [realRoot, realGit] = await Promise.all([realpath(workspaceRoot), realpath(gitPath)]);
+    const relative = path.relative(realRoot, realGit);
+    return relative !== ".."
+      && !relative.startsWith(".." + path.sep)
+      && !path.isAbsolute(relative);
+  } catch {
+    return false;
+  }
+}
+
 async function getGitFacts(workspaceRoot: string) {
+  if (!(await hasContainedGitDirectory(workspaceRoot))) {
+    return {
+      branch: "unknown",
+      commitHash: "unknown",
+      recentCommits: [],
+    };
+  }
+
   try {
     const git = simpleGit(workspaceRoot);
     const branch = await git.revparse(["--abbrev-ref", "HEAD"]);
@@ -193,9 +249,10 @@ async function filterSmallTextFiles(workspaceRoot: string, patterns: string[]) {
 }
 
 export async function scanRepository(workspaceRoot: string): Promise<RepoScan> {
-  const packageJson =
-    (await readJsonIfExists<Record<string, unknown>>(path.join(workspaceRoot, "package.json"))) ??
-    null;
+  const packageJsonRaw = await readRegularFileIfExists(workspaceRoot, "package.json");
+  const packageJson = packageJsonRaw === null
+    ? null
+    : (JSON.parse(packageJsonRaw) as Record<string, unknown>);
 
   const appRoutes = await filterToRootFiles(
     workspaceRoot,
