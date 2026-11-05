@@ -63,4 +63,8 @@ program.command("ui").description("Print dashboard startup instructions").action
   return runUiCommand();
 });
 
-program.parseAsync(process.argv);
+void program.parseAsync(process.argv).catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`ContextForge: ${message}`);
+  process.exitCode = 1;
+});
