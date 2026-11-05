@@ -400,7 +400,7 @@ export function inferKindFromText(text: string): JournalEventKind {
   return "fact";
 }
 
-function inferFileKeyFromText(text: string): MemoryFileKey {
+export function inferFileKeyFromText(text: string): MemoryFileKey {
   const lowered = text.toLowerCase();
 
   if (/(bug|error|fix|redirect loop|failed request|exception)/.test(lowered)) {
@@ -499,7 +499,15 @@ export async function checkpointMemory(
   input: CheckpointInput,
 ): Promise<{ event: JournalEvent; item: MemoryItem | null; fileKey: MemoryFileKey; created: boolean }> {
   await initWorkspace(workspaceRoot);
-  const kind = input.kind || inferKindFromText(input.text);
+  let fileKey: MemoryFileKey;
+  let kind: JournalEventKind;
+  if (input.kind) {
+    kind = input.kind;
+    fileKey = KIND_TO_FILE_KEY[kind] || inferFileKeyFromText(input.text);
+  } else {
+    fileKey = inferFileKeyFromText(input.text);
+    kind = FILE_KEY_TO_KIND[fileKey] || inferKindFromText(input.text);
+  }
   let source = input.source?.trim() || "";
 
   if (!source) {
@@ -524,7 +532,6 @@ export async function checkpointMemory(
   });
 
   let item: MemoryItem | null = null;
-  const fileKey = KIND_TO_FILE_KEY[kind] || inferFileKeyFromText(input.text);
   if (!input.noSync) {
     item = await appendMemoryItem(workspaceRoot, fileKey, {
       type: kind,
