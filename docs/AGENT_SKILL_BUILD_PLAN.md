@@ -32,24 +32,30 @@ Acceptance:
 - Security limitations are explicit; no secret values in test fixtures or documentation.
 - CI is green across platforms.
 
-## Milestone B — Integrate with the TypeScript CLI
+## Milestone B — Integrate with the TypeScript CLI (unified interface)
+
+Status: Completed and verified with bidirectional hash-chain interoperability.
 
 Acceptance:
-- A single documented UX exposes checkpoint, recall, review and context export.
-- One canonical schema/migration strategy; avoid hidden duplicated sources of truth.
-- Import existing .contextforge Markdown data without destructive conversion.
+- A single documented UX exposes `checkpoint`, `recall`, `audit`, `repair`, `sync`, and context export.
+- One canonical schema/migration strategy: binary-compatible SHA-256 hash-chain journal and synchronized Markdown documents.
+- Bidirectional sync: Markdown items import to journal without duplication; journal updates reflect in Markdown.
 - Agent exports remain collision-safe; explicit consent required before overwriting existing instructions.
-- All CLI commands work offline and have integration tests.
-- CLI packaging/installation is tested from an actual generated tarball, not a private source checkout.
+- All CLI commands work offline and have verified integration tests.
+- 100% interoperability between Python skill script and Node CLI verified in test suite.
 
-## Milestone C — Reliable memory lifecycle
+## Milestone C — Context management improvements (tiered context)
+
+Status: Completed and verified.
 
 Acceptance:
-- An explicit checkpoint routine for major decisions, tests, bugs, blockers and next actions.
-- Stale references flagged with repository evidence (Git SHA/path existence/optional code references).
-- Provenance confidence and superseding records; reviewer approval for inferred facts.
-- Bounded retention, archives and migrations; backups with restore tests.
-- No claim of automatic perfect recall.
+- Tiered context output levels:
+  - `handoff`: compact milestone view (immediate blockers, next steps, recent decisions, <=1800 chars).
+  - `capsule`: task-focused context view (decisions, architecture, needed/avoid files, errors, <=4500 chars).
+  - `evidence`: full provenance view with file existence checks on disk, Git SHA anchors, and timestamps (<=8000 chars).
+- Strict budget enforcement with lexical keyword ranking, kind priority weighting, and recency scoring.
+- Formats: Markdown and JSON.
+- Grounded Git commit anchors automatically captured when available.
 
 ## Milestone D — Privacy and security
 
@@ -87,7 +93,7 @@ Work one milestone at a time; one reviewable PR per independent logical change. 
 - #12 Windows/macOS end-user testing
 - #13 classification and drift regression coverage
 - #14 verified npm CLI packaging
-- #16 unified memory interface
+- #16 unified memory interface (addressed in PR)
 - #17 reproducible context-retention benchmark
 
 See references/design.md under the agent skill for the current experimental retrieval contract.

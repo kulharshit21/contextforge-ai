@@ -3,6 +3,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import matter from "gray-matter";
+import simpleGit from "simple-git";
 
 import { isoNow } from "@/lib/utils/date";
 import {
@@ -14,17 +15,27 @@ import {
 } from "@/lib/utils/fs";
 import { slugify } from "@/lib/utils/slug";
 
+import {
+  appendJournalEvent,
+  auditJournal,
+  readJournalEvents,
+  repairJournal,
+} from "./journal";
 import { parseMemoryFile, renderMemoryFile } from "./markdown";
 import {
   CapsuleSchema,
+  JOURNAL_EVENT_KINDS,
   MemoryFileKeySchema,
   RepoScanSchema,
   type Capsule,
   type ExtractedMemory,
+  type JournalEvent,
+  type JournalEventKind,
   type MemoryFile,
   type MemoryFileKey,
   type MemoryItem,
 } from "./schemas";
+import { buildTieredContext, type TieredContextOptions } from "./tiered-context";
 
 type MemoryFileDefinition = {
   key: MemoryFileKey;
@@ -140,6 +151,30 @@ const SECTION_TO_FILE_KEY: Record<keyof ExtractedMemory, MemoryFileKey> = {
   current_tasks: "CURRENT_TASKS",
 };
 
+export const KIND_TO_FILE_KEY: Record<JournalEventKind, MemoryFileKey> = {
+  decision: "DECISIONS",
+  bug: "BUGS_AND_FIXES",
+  blocker: "CURRENT_TASKS",
+  next: "CURRENT_TASKS",
+  handoff: "CURRENT_TASKS",
+  architecture: "ARCHITECTURE",
+  fact: "PROJECT_STATE",
+  test: "PROJECT_STATE",
+};
+
+export const FILE_KEY_TO_KIND: Record<MemoryFileKey, JournalEventKind> = {
+  DECISIONS: "decision",
+  BUGS_AND_FIXES: "bug",
+  FAILED_ATTEMPTS: "bug",
+  CURRENT_TASKS: "next",
+  ARCHITECTURE: "architecture",
+  PROJECT_STATE: "fact",
+  FEATURES: "fact",
+  API_CONTRACTS: "architecture",
+  ENV_AND_SETUP: "fact",
+  CODING_RULES: "fact",
+};
+
 export function getContextForgeDir(workspaceRoot: string) {
   return path.join(workspaceRoot, ".contextforge");
 }
@@ -191,10 +226,15 @@ function buildIndexMarkdown(projectName: string) {
     "",
     "## Commands",
     "",
+    "- `contextforge checkpoint \"...\"` to save a verified memory record.",
+    "- `contextforge recall [task]` to restore tiered context.",
     "- `contextforge remember \"...\"` to append durable memory.",
     "- `contextforge scan` to refresh repo scan facts.",
     "- `contextforge capsule \"task\"` to generate a task-specific capsule.",
     "- `contextforge doctor` to detect memory drift.",
+    "- `contextforge audit` to verify log integrity.",
+    "- `contextforge repair` to recover from crashed writes.",
+    "- `contextforge sync` to harmonize journal with Markdown memory.",
   ].join("\n");
 }
 
@@ -348,6 +388,18 @@ function buildItemTitle(text: string) {
   return firstSentence.slice(0, 72);
 }
 
+export function inferKindFromText(text: string): JournalEventKind {
+  const lowered = text.toLowerCase();
+  if (/\b(blocker|blocked|cannot proceed)\b/.test(lowered)) return "blocker";
+  if (/\b(next step|next action|todo|will do)\b/.test(lowered)) return "next";
+  if (/\b(test|passed|verified ci|regression test)\b/.test(lowered)) return "test";
+  if (/\b(bug|error|fix|failure|exception)\b/.test(lowered)) return "bug";
+  if (/\b(decision|decided|tradeoff|chosen)\b/.test(lowered)) return "decision";
+  if (/\b(architecture|component|interface|database flow)\b/.test(lowered)) return "architecture";
+  if (/\b(handoff|milestone|session end)\b/.test(lowered)) return "handoff";
+  return "fact";
+}
+
 function inferFileKeyFromText(text: string): MemoryFileKey {
   const lowered = text.toLowerCase();
 
@@ -375,7 +427,6 @@ function inferFileKeyFromText(text: string): MemoryFileKey {
   if (/(npm|pnpm|yarn|bun|env|install|setup|supabase|ollama|gemini)/.test(lowered)) {
     return "ENV_AND_SETUP";
   }
-
 
   if (/(task|next step|blocker|todo|currently|active)/.test(lowered)) {
     return "CURRENT_TASKS";
@@ -433,17 +484,150 @@ function updateSummary(previousSummary: string, item: MemoryItem) {
   return `${snippet}\n\n${nextSummary}`.slice(0, 1200);
 }
 
+export type CheckpointInput = {
+  text: string;
+  kind?: JournalEventKind;
+  source?: string;
+  tags?: string[];
+  supersedes?: string;
+  noSync?: boolean;
+  breakLock?: boolean;
+};
+
+export async function checkpointMemory(
+  workspaceRoot: string,
+  input: CheckpointInput,
+): Promise<{ event: JournalEvent; item: MemoryItem | null; fileKey: MemoryFileKey; created: boolean }> {
+  await initWorkspace(workspaceRoot);
+  const kind = input.kind || inferKindFromText(input.text);
+  let source = input.source?.trim() || "";
+
+  if (!source) {
+    try {
+      const git = simpleGit(workspaceRoot);
+      const commit = await git.revparse(["--short", "HEAD"]);
+      if (commit && commit !== "HEAD") {
+        source = `git:${commit}`;
+      }
+    } catch {
+      // not a git repository or git missing; continue without git anchor
+    }
+  }
+
+  const { event, created } = await appendJournalEvent(workspaceRoot, {
+    kind,
+    text: input.text,
+    source,
+    tags: input.tags,
+    supersedes: input.supersedes,
+    breakLock: input.breakLock,
+  });
+
+  let item: MemoryItem | null = null;
+  const fileKey = KIND_TO_FILE_KEY[kind] || inferFileKeyFromText(input.text);
+  if (!input.noSync) {
+    item = await appendMemoryItem(workspaceRoot, fileKey, {
+      type: kind,
+      title: buildItemTitle(input.text),
+      content: input.text,
+      source: source || "cli:checkpoint",
+      confidence: 0.9,
+      related_files: source.startsWith("git:") ? [] : (source ? [source] : []),
+      tags: input.tags || [kind],
+    });
+  }
+
+  return { event, item, fileKey, created };
+}
+
 export async function remember(workspaceRoot: string, text: string) {
+  const result = await checkpointMemory(workspaceRoot, { text });
+  if (result.item) {
+    return result.item;
+  }
   const fileKey = inferFileKeyFromText(text);
-  return appendMemoryItem(workspaceRoot, fileKey, {
+  return {
+    id: result.event.id,
     type: fileKey.toLowerCase(),
     title: buildItemTitle(text),
     content: text,
     source: "cli:remember",
     confidence: 0.86,
+    created_at: result.event.created_at,
+    updated_at: result.event.created_at,
     related_files: [],
     tags: ["remember"],
-  });
+  };
+}
+
+export async function recallContext(
+  workspaceRoot: string,
+  options: TieredContextOptions = {},
+) {
+  await initWorkspace(workspaceRoot);
+  const events = await readJournalEvents(workspaceRoot);
+  return buildTieredContext(events, { ...options, workspaceRoot });
+}
+
+export async function auditAllMemory(workspaceRoot: string) {
+  await initWorkspace(workspaceRoot);
+  const journal = await auditJournal(workspaceRoot);
+  const memoryFiles = await loadMemoryFiles(workspaceRoot);
+  const markdownSummary: Record<string, number> = {};
+  for (const f of memoryFiles) {
+    markdownSummary[f.file_key] = f.items.length;
+  }
+  return {
+    journal,
+    markdown: {
+      fileCount: memoryFiles.length,
+      items: markdownSummary,
+    },
+  };
+}
+
+export async function repairAllMemory(
+  workspaceRoot: string,
+  breakLock = false,
+) {
+  await initWorkspace(workspaceRoot);
+  return repairJournal(workspaceRoot, breakLock);
+}
+
+export async function syncMemory(workspaceRoot: string): Promise<{
+  importedToJournal: number;
+}> {
+  await initWorkspace(workspaceRoot);
+  const memoryFiles = await loadMemoryFiles(workspaceRoot);
+  const journalEvents = await readJournalEvents(workspaceRoot);
+
+  let importedToJournal = 0;
+  for (const file of memoryFiles) {
+    const defaultKind = FILE_KEY_TO_KIND[file.file_key] || "fact";
+    for (const item of file.items) {
+      const exists = journalEvents.some(
+        (e) => e.text.trim() === item.content.trim(),
+      );
+      if (!exists && item.content.trim()) {
+        try {
+          const kind = (JOURNAL_EVENT_KINDS.includes(item.type as JournalEventKind)
+            ? (item.type as JournalEventKind)
+            : defaultKind);
+          await appendJournalEvent(workspaceRoot, {
+            kind,
+            text: item.content,
+            source: item.source || `${file.file_key}.md`,
+            tags: item.tags,
+          });
+          importedToJournal++;
+        } catch {
+          // ignore invalid or sensitive item imports
+        }
+      }
+    }
+  }
+
+  return { importedToJournal };
 }
 
 export async function mergeExtractedMemory(

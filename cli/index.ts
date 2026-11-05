@@ -2,30 +2,85 @@
 
 import { Command } from "commander";
 
+import { runAuditCommand, type AuditCommandOptions } from "./commands/audit";
 import { runCapsuleCommand } from "./commands/capsule";
+import { runCheckpointCommand, type CheckpointCommandOptions } from "./commands/checkpoint";
 import { runDoctorCommand } from "./commands/doctor";
 import { runExportCommand } from "./commands/export";
 import { runIngestChatCommand } from "./commands/ingest-chat";
 import { runInitCommand } from "./commands/init";
+import { runRecallCommand, type RecallCommandOptions } from "./commands/recall";
 import { runRememberCommand } from "./commands/remember";
+import { runRepairCommand, type RepairCommandOptions } from "./commands/repair";
 import { runScanCommand } from "./commands/scan";
 import { runStatsCommand } from "./commands/stats";
+import { runSyncCommand } from "./commands/sync";
 import { runUiCommand } from "./commands/ui";
 
 const program = new Command();
 
 program
   .name("contextforge")
-  .description("Local-first AI project memory compiler")
+  .description("Local-first AI project memory compiler and persistent context engine")
   .version("0.1.0");
 
-program.command("init").description("Initialize .contextforge memory files").action(() => {
+program.command("init").description("Initialize .contextforge memory files and journal").action(() => {
   return runInitCommand();
 });
 
 program
+  .command("checkpoint")
+  .alias("save")
+  .description("Save a verified, provenance-backed memory checkpoint")
+  .argument("<text>", "concise memory note")
+  .option("--kind <kind>", "memory kind (decision, fact, architecture, bug, blocker, next, test, handoff)")
+  .option("--source <source>", "verifiable evidence file, commit hash, or issue")
+  .option("--tags <tags>", "comma-separated searchable tags")
+  .option("--supersedes <id>", "earlier 12-character record ID being corrected")
+  .option("--no-sync", "skip synchronizing to structured Markdown memory files")
+  .option("--break-lock", "force clear an abandoned writer lock")
+  .action((text: string, options: CheckpointCommandOptions) => {
+    return runCheckpointCommand(text, options);
+  });
+
+program
+  .command("recall")
+  .description("Restore task-relevant context from local memory within an explicit budget")
+  .argument("[task]", "task description for relevance scoring", "")
+  .option("--level <level>", "context tier: handoff (compact), capsule (standard), or evidence (full)", "capsule")
+  .option("--budget-chars <budget>", "strict character budget for context recovery")
+  .option("--format <format>", "output format: markdown or json", "markdown")
+  .option("--out <file>", "write restored context to file")
+  .action((task: string, options: RecallCommandOptions) => {
+    return runRecallCommand(task, options);
+  });
+
+program
+  .command("audit")
+  .description("Verify append-only journal integrity, active record counts, and markdown memory")
+  .option("--verbose", "show kind breakdown and lock status")
+  .action((options: AuditCommandOptions) => {
+    return runAuditCommand(options);
+  });
+
+program
+  .command("repair")
+  .description("Recover from interrupted writes, truncated logs, or stale writer locks with backup")
+  .option("--break-lock", "force clear active writer lock")
+  .action((options: RepairCommandOptions) => {
+    return runRepairCommand(options);
+  });
+
+program
+  .command("sync")
+  .description("Synchronize structured Markdown memory files with the append-only journal")
+  .action(() => {
+    return runSyncCommand();
+  });
+
+program
   .command("remember")
-  .description("Add a durable note to the right memory file")
+  .description("Add a durable note to the right memory file and journal")
   .argument("<text>", "memory note")
   .action((text) => runRememberCommand(text));
 

@@ -3,7 +3,6 @@ name: CI
 permissions:
   contents: read
 
-
 on:
   push:
     branches:
@@ -46,11 +45,15 @@ jobs:
           cd "$SMOKE_DIR"
           printf '{ "name": "contextforge-smoke" }\n' > package.json
           node "$GITHUB_WORKSPACE/bin/contextforge.js" init
+          node "$GITHUB_WORKSPACE/bin/contextforge.js" checkpoint "Smoke test decision" --kind decision --source package.json
+          node "$GITHUB_WORKSPACE/bin/contextforge.js" recall --level handoff
+          node "$GITHUB_WORKSPACE/bin/contextforge.js" audit --verbose
           node "$GITHUB_WORKSPACE/bin/contextforge.js" scan
           node "$GITHUB_WORKSPACE/bin/contextforge.js" capsule "Add pharmacy invoice feature"
           node "$GITHUB_WORKSPACE/bin/contextforge.js" export --all
           node "$GITHUB_WORKSPACE/bin/contextforge.js" doctor
           test -f .contextforge/repo-scan.json
+          test -f .contextforge/agent-memory/events.jsonl
 
   memory-skill:
     name: Agent memory skill

@@ -4,6 +4,14 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Unified memory interface across TypeScript CLI and Python agent-memory skill:
+  - Implemented `lib/memory/journal.ts` with 100% SHA-256 hash-chain and JSONL binary compatibility with the Python skill engine.
+  - Implemented `lib/memory/tiered-context.ts` supporting three context recovery tiers: `handoff` (compact), `capsule` (standard), and `evidence` (provenance-backed with file existence and Git SHA anchors).
+  - Added new CLI commands: `checkpoint` (alias `save`), `recall`, `audit`, `repair`, and `sync`.
+  - Harmonized journal events with structured Markdown files (`DECISIONS.md`, `CURRENT_TASKS.md`, `BUGS_AND_FIXES.md`, etc.) to prevent dual-source drift.
+  - Updated `remember` to record into both the append-only journal and structured Markdown.
+  - Added end-to-end integration tests verifying bidirectional hash-chain interoperability between Python and Node runtimes.
+  - Added CLI smoke test coverage for `checkpoint`, `recall`, and `audit` in GitHub Actions CI.
 - Hardened Python agent memory engine (`contextforge-memory`):
   - Stale lock detection with PID liveness verification across Windows, Linux, and macOS.
   - Added `repair` CLI command to recover from stale locks and safely truncate corrupted trailing records with automatic timestamped `.bak` backups.
