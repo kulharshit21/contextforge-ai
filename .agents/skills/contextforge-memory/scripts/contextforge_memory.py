@@ -138,6 +138,10 @@ def compact(records: list[dict], task: str, budget: int) -> str:
     for position, e in enumerate(chosen):
         words = terms(e["text"] + " " + " ".join(e.get("tags", [])))
         overlap = len(words & needles)
+        # When a task is provided, avoid spending context on unrelated low-priority notes.
+        # Still retain global blockers, next actions, decisions, and handoffs.
+        if needles and overlap == 0 and e["kind"] not in ("blocker", "next", "decision", "handoff"):
+            continue
         priority = {"blocker": 11, "next": 10, "decision": 8, "bug": 6, "handoff": 5,
                     "test": 4, "architecture": 3, "fact": 2}[e["kind"]]
         recency = (position + 1) / max(1, len(chosen))
