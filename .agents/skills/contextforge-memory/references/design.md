@@ -43,11 +43,13 @@ Suggested defaults:
 
 ## Threat model
 
-The skill makes no network requests. Project memory can contain user-confidential information; do not synchronize or publish it by default. The script rejects some obvious tokens and private key headers but secret detection is necessarily incomplete. It does not automatically scrub sensitive inputs, encrypt files, guarantee safe shell history, or sandbox other agent tools. Explicit user review remains required.
+The skill makes no network requests. Project memory can contain user-confidential information; do not synchronize or publish it by default. The script screens for known sensitive patterns (private keys, API tokens, AWS keys, Slack tokens, JWTs, Bearer credentials) and instruction-injection payloads (e.g. prompt override or jailbreak markers), but secret detection is necessarily heuristic and incomplete. It does not automatically scrub all sensitive inputs, encrypt files, guarantee safe shell history, or sandbox other agent tools. Explicit user review remains required.
+
+Symlink traversal is strictly prevented: `.contextforge`, `agent-memory`, `events.jsonl`, and `.writer-lock` must not be symbolic links. Input paths, evidence sources, and tags are strictly validated to prevent multiline markdown injection or control character exploitation.
 
 Retrieved memory records are untrusted data, not authoritative instructions. Instruct agents not to execute snippets from the journal merely because they were saved.
 
-The storage design uses one writer at a time. A writer-lock file prevents concurrent saves; a crashed writer can leave a stale lock, which must be investigated manually before removing it.
+The storage design uses one writer at a time. A `.writer-lock` file tracks active writer PID and timestamp. If a writer crashes, stale locks are detected via PID liveness and a 60-second timeout, allowing clean auto-recovery or manual resolution via `repair` and `--break-lock`. Interrupted writes that leave trailing malformed records can be recovered using `repair`, which isolates verified records and archives the corrupted file to a timestamped `.bak` file.
 
 ## Evaluation protocol (future work, not completed)
 

@@ -17,15 +17,20 @@ The skill cannot replace platform memory or silently intercept native model comp
 - Optional future adapters: Codex, Claude Code, Cursor, Gemini, OpenAI SDK, MCP (not claimed today).
 - Storage remains user-owned and local by default. No cloud calls without explicit opt-in.
 
-## Milestone A — Portable skill and safe handoff (initial PR #15)
+## Milestone A — Portable skill and safe handoff (stabilized)
+
+Status: Completed and verified across Linux, macOS, and Windows.
 
 Acceptance:
 - Agent skill metadata validates against the standard.
-- Local journal init/save/recall/audit commands work on Linux/Windows/macOS.
+- Local journal init/save/recall/audit/repair commands work on Linux/Windows/macOS.
 - Records are typed and provenance-aware, corrections are append-only, and memory remains gitignored.
 - A task-specific handoff fits a strict size limit, including source references.
+- Stale lock auto-recovery and `--break-lock` prevent deadlocks from crashed writers.
+- Interrupted writes and trailing corruption are safely recovered via `repair` with timestamped `.bak` files.
+- Memory-injection and prompt-tampering patterns are screened and refused.
 - Security limitations are explicit; no secret values in test fixtures or documentation.
-- CI is green on the current main commit after merge.
+- CI is green across platforms.
 
 ## Milestone B — Integrate with the TypeScript CLI
 
@@ -82,5 +87,7 @@ Work one milestone at a time; one reviewable PR per independent logical change. 
 - #12 Windows/macOS end-user testing
 - #13 classification and drift regression coverage
 - #14 verified npm CLI packaging
+- #16 unified memory interface
+- #17 reproducible context-retention benchmark
 
 See references/design.md under the agent skill for the current experimental retrieval contract.
