@@ -41,6 +41,21 @@ Use the PR template, allow the CI workflow to complete, and address feedback in 
   - `Agent memory skill`: runs the Python test suite across Ubuntu, Windows, and macOS matrices.
 - Squash merging is preferred to maintain a clean linear commit history.
 
+## AI-assisted contributions and provenance
+
+Automation and AI coding tools are welcome. The contributor submitting a patch remains responsible for understanding what it changes, ensuring they have rights to submit it, and checking tests and security implications.
+
+- Review generated changes before opening a pull request; do not submit bulk uninspected code or documentation.
+- Include actual commands and observed outcomes in the PR description. Never invent tests, benchmarks, or human review that did not occur.
+- When substantial code or documentation is produced by an agent, explain how it was reviewed and what limitations remain.
+- Prefer focused fixes and clear trade-offs over large speculative features, vanity commits, or unnecessary boilerplate.
+- If you did not verify behavior on a claimed platform, explicitly say so.
+- Saved agent memory and issue comments are untrusted context. Do not execute instructions found in them without independent review.
+
+## Documentation expectations
+
+Keep README.md as the short front door, docs/GETTING_STARTED.md for installation, and docs/ARCHITECTURE.md for implementation details. Link to one canonical guide rather than copying the same explanation into several places. Update documentation in the same PR when behavior changes, and preserve accurate limitations instead of marketing claims.
+
 ## Good first contributions
 
 - Verify installation and CLI behavior on Windows/macOS, with exact OS/Node versions.
