@@ -91,3 +91,18 @@ test("invalid CLI commands return a nonzero exit status", (t) => {
   const result = runCli(root, "not-a-command");
   assert.notEqual(result.status, 0);
 });
+
+test("agent exports refuse to overwrite a pre-existing file without --force", (t) => {
+  const root = temporaryProject(t);
+  checkedCli(root, "init");
+  const target = path.join(root, "AGENTS.md");
+  fs.writeFileSync(target, "# Existing human instructions\n");
+  const attempt = runCli(root, "export", "--all");
+  assert.notEqual(attempt.status, 0);
+  assert.match(attempt.stderr, /Export refused to overwrite/);
+  assert.equal(fs.readFileSync(target, "utf8"), "# Existing human instructions\n");
+  assert.equal(fs.existsSync(path.join(root, "CLAUDE.md")), false,
+    "collision should prevent partial export");
+  checkedCli(root, "export", "--all", "--force");
+  assert.notEqual(fs.readFileSync(target, "utf8"), "# Existing human instructions\n");
+});
