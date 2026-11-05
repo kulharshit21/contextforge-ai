@@ -1,9 +1,9 @@
-"""Generate 30 realistic multi-session engineering scenarios for context retention benchmarking.
+"""Generate 30 synthetic multi-session engineering scenarios for context retention benchmarking.
 
 Each task contains:
 - task_id, title, domain, query
 - historical_events: 20-30 historical events across 4-6 development sessions (~4,500 - 6,500 chars total)
-- gold_facts: human-verified critical facts distributed across early sessions, middle bugs, and current blockers
+- gold_facts: generator-labelled critical facts distributed across early sessions, middle bugs, and current blockers
 - superseded_facts: outdated facts that were superseded by later decisions
 - adversarial_injections: prompt injection attempts embedded in history
 """
