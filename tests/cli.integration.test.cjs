@@ -265,3 +265,41 @@ test("repeated checkpoints are idempotent in the Markdown mirror", (t) => {
     "Duplicate checkpoint should not mutate the Markdown mirror");
   assert.match(checkedCli(root, "audit"), /integrity chain valid/);
 });
+
+
+test("evidence-level source verification rejects sibling-prefix and symlink escapes", (t) => {
+  const root = temporaryProject(t);
+  const sibling = root + "-outside";
+  fs.mkdirSync(sibling);
+  t.after(() => fs.rmSync(sibling, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(sibling, "secret.md"), "sample file outside project\n");
+
+  const docsDir = path.join(root, "docs");
+  fs.mkdirSync(docsDir);
+  fs.writeFileSync(path.join(docsDir, "inside.md"), "# Local source\n");
+  checkedCli(root, "init");
+  checkedCli(root, "checkpoint", "Keep the release evidence inside the repository",
+    "--kind", "decision", "--source", "docs/inside.md");
+  checkedCli(root, "checkpoint", "A sibling repo must not be marked verified",
+    "--kind", "fact", "--source", "../" + path.basename(sibling) + "/secret.md");
+  checkedCli(root, "checkpoint", "Link to an official GitHub CI run",
+    "--kind", "test", "--source", "https://github.com/example/repo/actions/runs/100");
+
+  const evidence = checkedCli(root, "recall", "--level", "evidence");
+  assert.match(evidence, /docs\/inside\.md \[verified file on disk\]/);
+  assert.match(evidence, /secret\.md \[stale or missing path\]/);
+  assert.doesNotMatch(evidence, /secret\.md \[verified file on disk\]/);
+  assert.doesNotMatch(evidence, /actions\/runs\/100 \[stale or missing path\]/);
+
+  const linkPath = path.join(root, "docs", "external.md");
+  try {
+    fs.symlinkSync(path.join(sibling, "secret.md"), linkPath);
+    checkedCli(root, "checkpoint", "Symlink escape is not a verified evidence file",
+      "--kind", "bug", "--source", "docs/external.md");
+    const withSymlink = checkedCli(root, "recall", "--level", "evidence");
+    assert.match(withSymlink, /docs\/external\.md \[stale or missing path\]/);
+  } catch (error) {
+    // Creating symlinks can require Windows developer mode or privileges.
+    if (!error || !["EPERM", "EACCES", "ENOSYS"].includes(error.code)) throw error;
+  }
+});
