@@ -10,7 +10,7 @@
 A full dependency audit was performed using `npm audit` and `npm audit --omit=dev` on Node 24.
 Prior to this remediation, `npm ci` reported **24 vulnerabilities** (2 low, 9 moderate, 10 high, 3 critical).
 
-Through targeted dependency upgrades and conservative package overrides (avoiding unverified `npm audit fix --force` breaking upgrades), all actionable direct critical and high-severity vulnerabilities have been resolved in code and lockfile, while all remaining transitive advisories have been triaged for runtime reachability with documented compensating controls.
+Targeted dependency upgrades and conservative package overrides remediated several direct advisories. **This audit is a historical snapshot, not proof that the dependency tree is currently free of high-severity issues.** The pinned `next@16.2.4` is affected by high-severity [GHSA-8h8q-6873-q5fj](https://github.com/vercel/next.js/security/advisories/GHSA-8h8q-6873-q5fj) (fixed in `16.2.5`). Remediation and public-deployment verification are tracked in [issue #32](https://github.com/kulharshit21/contextforge-ai/issues/32). Re-run `npm audit` and review the current upstream advisories before each release.
 
 ---
 
@@ -30,14 +30,12 @@ Through targeted dependency upgrades and conservative package overrides (avoidin
 
 The remaining advisories in `npm audit --omit=dev` are transitive dependencies whose parent libraries have not yet cut non-breaking releases, or build-time tools. Each has been assessed for actual runtime reachability in ContextForge:
 
-### 3.1 Next.js (`next@16.2.4`)
-- **Reported Advisories:** GHSA-8h8q-6873-q5fj (Server Actions / SSG / ISR cache poisoning, RCE in edge cases).
-- **Runtime Reachability:** **Zero public exposure**. ContextForge uses Next.js exclusively for a developer's local dashboard.
-- **Compensating Controls:**
-  - Both `npm run dev` and `npm start` explicitly pass `--hostname 127.0.0.1`.
-  - The application is never deployed as an untrusted public multi-tenant edge or serverless service.
-  - No public server actions or SSG dynamic multi-user caching is enabled.
-  - Upgrading to `16.4.5` requires major breaking dependency transitions that will be tracked in a future scheduled framework upgrade.
+### 3.1 Next.js (`next@16.2.4`) — **open security finding**
+
+- **Advisory:** [GHSA-8h8q-6873-q5fj](https://github.com/vercel/next.js/security/advisories/GHSA-8h8q-6873-q5fj) documents a high-severity Server Components denial of service in Next.js `>=16.0.0 <16.2.5`; `16.2.5` is patched. The pinned `16.2.4` is in the affected range.
+- **Risk context:** The CLI is usable offline, and local dashboard commands bind to loopback. However, GitHub shows production deployments for this repository and the Vercel demo may still expose public Next.js HTTP paths. It is inaccurate to claim **zero public exposure** without checking actual deployment routes and configuration.
+- **Required action:** Update Next.js and its lockfile together to a security-reviewed compatible version, re-run all CI and dependency audits, and verify the deployed version and external surfaces. See [issue #32](https://github.com/kulharshit21/contextforge-ai/issues/32).
+- **Scope limitation:** This advisory is not proof that a specific ContextForge endpoint is exploitable, but it is a documented reason to avoid a production-security claim before remediation.
 
 ### 3.2 Sharp (`sharp@0.34.5`)
 - **Reported Advisories:** Upstream C-library vulnerabilities in libvips / libheif / librsvg.
