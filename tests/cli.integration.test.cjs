@@ -359,3 +359,53 @@ test("skill lifecycle: status, install, direct invocation, and uninstall in targ
   const finalStatus = JSON.parse(checkedCli(root, "skill", "status", "--json"));
   assert.equal(finalStatus.installed, false);
 });
+
+
+test("skill lifecycle never overwrites partial installs or deletes user-added content", (t) => {
+  const root = temporaryProject(t);
+  const dest = path.join(root, ".agents", "skills", "contextforge-memory");
+  fs.mkdirSync(path.join(dest, "scripts"), { recursive: true });
+  const userFile = path.join(dest, "scripts", "contextforge_memory.py");
+  fs.writeFileSync(userFile, "# user-owned file\n");
+
+  const installBlocked = runCli(root, "skill", "install");
+  assert.notEqual(installBlocked.status, 0);
+  assert.equal(fs.readFileSync(userFile, "utf8"), "# user-owned file\n");
+
+  const forcedBlocked = runCli(root, "skill", "install", "--force");
+  assert.notEqual(forcedBlocked.status, 0, "force should not overwrite unrecognized data");
+  assert.equal(fs.readFileSync(userFile, "utf8"), "# user-owned file\n");
+
+  const uninstallBlocked = runCli(root, "skill", "uninstall");
+  assert.notEqual(uninstallBlocked.status, 0);
+  assert.equal(fs.readFileSync(userFile, "utf8"), "# user-owned file\n");
+});
+
+test("skill lifecycle refuses modified managed files and unexpected files", (t) => {
+  const root = temporaryProject(t);
+  checkedCli(root, "skill", "install");
+  const dest = path.join(root, ".agents", "skills", "contextforge-memory");
+  const unexpected = path.join(dest, "local-notes.md");
+  fs.writeFileSync(unexpected, "I own this file\n");
+  const uninstallBlocked = runCli(root, "skill", "uninstall");
+  assert.notEqual(uninstallBlocked.status, 0);
+  assert.equal(fs.readFileSync(unexpected, "utf8"), "I own this file\n");
+  const overwriteBlocked = runCli(root, "skill", "install", "--force");
+  assert.notEqual(overwriteBlocked.status, 0);
+  fs.unlinkSync(unexpected);
+  const script = path.join(dest, "scripts", "contextforge_memory.py");
+  fs.appendFileSync(script, "\n# local modifications\n");
+  assert.notEqual(runCli(root, "skill", "uninstall").status, 0);
+  assert.notEqual(runCli(root, "skill", "install", "--force").status, 0);
+  assert.match(fs.readFileSync(script, "utf8"), /local modifications/);
+});
+
+test("skill status does not treat partial installation as complete", (t) => {
+  const root = temporaryProject(t);
+  const dest = path.join(root, ".agents", "skills", "contextforge-memory");
+  fs.mkdirSync(path.join(dest, "scripts"), { recursive: true });
+  fs.writeFileSync(path.join(dest, "SKILL.md"), "---\nname: contextforge-memory\n---\n");
+  fs.writeFileSync(path.join(dest, "scripts", "contextforge_memory.py"), "# fake\n");
+  const status = JSON.parse(checkedCli(root, "skill", "status", "--json"));
+  assert.equal(status.installed, false, "design reference is mandatory");
+});
