@@ -22,7 +22,7 @@ The evaluator marks a gold fact as found when at least 60% of its specified keyw
 
 ## Previously recorded results (not a fair externally validated comparison)
 
-These are historical outputs from the original harness, retained for traceability while [issue #28](https://github.com/kulharshit21/contextforge-ai/issues/28) is resolved.
+These are historical **pre-source-parity-fix** outputs from the original harness, retained for traceability while [issue #28](https://github.com/kulharshit21/contextforge-ai/issues/28) is resolved.
 
 | Metric at 1,200-character nominal budget | Recent-first | Uniform shuffle | ContextForge |
 | --- | ---: | ---: | ---: |
@@ -37,9 +37,9 @@ The original report also included confidence intervals. Those intervals describe
 
 ## Known methodology defects
 
-### 1. Source-reference comparison is asymmetric
+### 1. Historical source-reference comparison was asymmetric
 
-The recent-first and uniform baselines count a source reference toward their character budget, but their emitted text omits that source. The evaluator then awards them zero citation presence by construction. The citation results therefore **cannot support a superiority claim** until all selectors use comparable output formats.
+The original runner counted source-reference characters in both baseline budgets but omitted them from baseline output. This unfairly caused 0% baseline source-string presence. **The runner now includes source references in baseline output**, so future re-runs can compare that aspect more fairly. The table above is a *historical pre-fix result* and must not be quoted as a current fair citation comparison. The metric still checks string presence rather than whether a cited source proves a claim.
 
 ### 2. The stale/superseded test is incomplete
 
