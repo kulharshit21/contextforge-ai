@@ -250,7 +250,7 @@ export async function runSkillInstallCommand(options: SkillCommandOptions) {
     if (!fs.statSync(destDir).isDirectory()) throw new Error("Skill destination is not a directory.");
     if (fs.readdirSync(destDir).length > 0) {
       if (!options.force) {
-        console.error("Skill directory already contains files at " + destDir + ". Use --force for an unmodified ContextForge-managed installation.");
+        console.error("Skill already installed or directory contains files at " + destDir + ". Use --force for an unmodified ContextForge-managed installation.");
         process.exitCode = 1;
         return;
       }
