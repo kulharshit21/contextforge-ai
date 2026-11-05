@@ -1,4 +1,5 @@
 import path from "node:path";
+import { lstat } from "node:fs/promises";
 
 import { analyzeMemoryDrift, extractMemoryFromChat, generateCapsuleFromMemory } from "../ai";
 import {
@@ -40,7 +41,7 @@ import {
 } from "../memory/schemas";
 import { scanRepository } from "../repo/scanner";
 import { isoNow } from "../utils/date";
-import { canUseLocalWorkspaceFilesystem, isDemoMode, isVercel } from "../utils/env";
+import { canScanExternalPaths, canUseLocalWorkspaceFilesystem, isDemoMode, isVercel } from "../utils/env";
 import { ensureDir, pathExists, readJsonIfExists, writeJsonPretty } from "../utils/fs";
 import { slugify } from "../utils/slug";
 
@@ -374,8 +375,8 @@ export async function createProject(input: {
     id: slug,
     name: input.name.trim(),
     description: typeof input.description === "string" ? input.description.trim() : "",
-    repoUrl: input.repoUrl ?? "",
-    localPathHint: input.localPathHint ?? "",
+    repoUrl: typeof input.repoUrl === "string" ? input.repoUrl : "",
+    localPathHint: typeof input.localPathHint === "string" ? input.localPathHint : "",
     workspaceRoot,
     stack: [],
     editable: true,
@@ -473,6 +474,38 @@ export async function saveUploadedRepoScan(projectId: string, scanJson: unknown)
   return writeRepoScan(project.workspaceRoot, scanJson);
 }
 
+// The scan endpoint reads package.json, README content, route listings, and git
+// history of its target. A project-local `localPathHint` therefore must not be
+// able to point the scan at arbitrary filesystem locations; only directories
+// inside the dashboard checkout are scanned unless the operator explicitly
+// opts in with CONTEXTFORGE_ALLOW_EXTERNAL_SCAN=1.
+async function assertScannableRoot(targetRoot: string) {
+  let stats;
+  try {
+    stats = await lstat(targetRoot);
+  } catch {
+    throw new Error(`Scan target does not exist or is not accessible: ${targetRoot}`);
+  }
+  if (stats.isSymbolicLink()) {
+    throw new Error(`Scan target cannot be a symbolic link: ${targetRoot}`);
+  }
+  if (!stats.isDirectory()) {
+    throw new Error(`Scan target is not a directory: ${targetRoot}`);
+  }
+
+  const serverRoot = path.resolve(process.cwd());
+  const relative = path.relative(serverRoot, targetRoot);
+  const insideServerRoot = relative !== ".."
+    && !relative.startsWith(".." + path.sep)
+    && !path.isAbsolute(relative);
+  if (!insideServerRoot && !canScanExternalPaths()) {
+    throw new Error(
+      "Refusing to scan directories outside the dashboard workspace root: " +
+        `${targetRoot}. Set CONTEXTFORGE_ALLOW_EXTERNAL_SCAN=1 to explicitly allow scanning other local paths.`,
+    );
+  }
+}
+
 export async function runProjectScan(projectId: string) {
   assertLocalWorkspaceWritesAvailable();
   const project = await findProjectRecord(projectId);
@@ -480,7 +513,8 @@ export async function runProjectScan(projectId: string) {
     throw new Error("Project not found.");
   }
 
-  const targetRoot = project.localPathHint || process.cwd();
+  const targetRoot = path.resolve(project.localPathHint || process.cwd());
+  await assertScannableRoot(targetRoot);
   const scan = await scanRepository(targetRoot);
   return writeRepoScan(project.workspaceRoot, {
     ...scan,

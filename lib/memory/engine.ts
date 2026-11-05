@@ -25,6 +25,7 @@ import { parseMemoryFile, renderMemoryFile } from "./markdown";
 import {
   CapsuleSchema,
   JOURNAL_EVENT_KINDS,
+  MEMORY_FILE_KEYS,
   MemoryFileKeySchema,
   RepoScanSchema,
   type Capsule,
@@ -354,7 +355,18 @@ export async function loadMemoryFile(
   return parseMemoryFile(raw);
 }
 
+function assertValidMemoryFileKey(fileKey: unknown): asserts fileKey is MemoryFileKey {
+  if (!MemoryFileKeySchema.safeParse(fileKey).success) {
+    throw new Error(
+      `Invalid memory file key: '${String(fileKey)}'. Must be one of: ${MEMORY_FILE_KEYS.join(", ")}`,
+    );
+  }
+}
+
 export async function saveMemoryFile(workspaceRoot: string, file: MemoryFile) {
+  // Unknown keys must never reach path construction: a raw key such as
+  // "../../evil" would otherwise escape the .contextforge directory.
+  assertValidMemoryFileKey(file.file_key);
   const nextFile: MemoryFile = {
     ...file,
     updated_at: isoNow(),
@@ -374,6 +386,9 @@ export async function saveMemoryFileRaw(
   fileKey: MemoryFileKey,
   raw: string,
 ) {
+  // Validate before parsing so callers get a precise error instead of a
+  // content-parse failure, and before any path is derived from the key.
+  assertValidMemoryFileKey(fileKey);
   const parsed = parseMemoryFile(raw);
   if (parsed.file_key !== fileKey) {
     parsed.file_key = fileKey;

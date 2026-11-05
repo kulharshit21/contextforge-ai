@@ -99,6 +99,8 @@ The journal is stored under `.contextforge/agent-memory/events.jsonl`. Each entr
 
 The dashboard is a **localhost development tool**, not an authenticated multi-user service. Vercel hosts a read-only seeded demo; do not expose local filesystem-backed endpoints to the public internet. Next.js is upgraded to ^16.4.5 (resolving [GHSA-8h8q-6873-q5fj](https://github.com/vercel/next.js/security/advisories/GHSA-8h8q-6873-q5fj); see `docs/DEPENDENCY_AUDIT.md`).
 
+Two local-boundary rules apply to the dashboard API: memory file edits accept only the ten known memory file keys (traversal values are rejected), and `POST /api/projects` with a `localPathHint` can only scan directories inside the dashboard checkout unless you start the dashboard with `CONTEXTFORGE_ALLOW_EXTERNAL_SCAN=1`.
+
 To start the dashboard from this source checkout:
 
 ~~~bash

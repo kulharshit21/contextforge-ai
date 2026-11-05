@@ -4,6 +4,13 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Hardened dashboard API filesystem boundaries (local, unauthenticated endpoints):
+  - `PUT /api/memory` now validates `fileKey` at runtime with zod. Previously a request with a traversal value such as `../../../../name` (accepted despite the TypeScript union type) could write attacker-controlled `.md` files outside the project workspace, including overwriting unrelated repositories' agent instruction files.
+  - `saveMemoryFile`/`saveMemoryFileRaw` reject unknown memory file keys before path construction, closing the same hole for any non-HTTP caller.
+  - `PUT /api/projects/scan` no longer scans arbitrary filesystem paths through `localPathHint`: scan targets must exist, must not be symlinks, and must stay inside the dashboard checkout unless `CONTEXTFORGE_ALLOW_EXTERNAL_SCAN=1` is set. Previously the endpoint disclosed file listings, README content, and git history of any directory on disk.
+  - `POST /api/projects` now type-checks `repoUrl`/`localPathHint` so non-string values cannot poison `workspaces/projects.json` and break project listing.
+  - Added regression tests in `tests/api-path-safety.test.cjs`.
+
 - Refined benchmark evaluation methodology and addressed issue #28:
   - Ensured fair baseline source accounting by formatting and budgeting `(source: ...)` within baseline character allocations, eliminating artificial 0% citation rates (recency now achieves 58.7% and uniform achieves 76.7% source-string presence at 1,200 chars).
   - Implemented explicit superseding links (`supersedes_event_idx`) across multi-session fixtures and verified active hash-chain record invalidation during retrieval.
