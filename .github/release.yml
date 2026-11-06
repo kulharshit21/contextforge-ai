@@ -1,0 +1,24 @@
+# Categories for automatically generated release notes (GitHub Releases).
+# Labels are optional: anything unlabeled falls into "Other changes".
+changelog:
+  exclude:
+    authors:
+      - dependabot[bot]
+      - github-actions[bot]
+  categories:
+    - title: Security and boundary hardening
+      labels:
+        - security
+    - title: Memory engine and Agent Skill
+      labels:
+        - area:memory
+        - area:skill
+    - title: Dashboard
+      labels:
+        - area:dashboard
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Other changes
+      labels:
+        - "*"

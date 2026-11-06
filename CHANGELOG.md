@@ -128,6 +128,10 @@ This project follows the general structure of Keep a Changelog. Versions below a
 - Added project import validation and duplicate-project protection.
 - Default local dashboard binding changed to loopback.
 
+## v0.1.0-beta.1 — Verified Early Access (2026-11-05)
+
+- First tagged prerelease, marking a verified checkpoint of the CLI, Agent Skill, and dashboard. See the [release notes](https://github.com/kulharshit21/contextforge-ai/releases/tag/v0.1.0-beta.1) for scope and the [release checklist](docs/RELEASE_CHECKLIST.md) for what a stable release requires. This is a beta: the CLI and skill surfaces may change between releases while the version is `0.x`.
+
 ## 0.1.0 — Initial MVP (source repository)
 
 - Local structured project memory, repo scans, capsule generation, drift checks, and agent exports.

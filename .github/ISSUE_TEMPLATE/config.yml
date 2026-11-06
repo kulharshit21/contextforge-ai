@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation and guides
+    url: https://github.com/kulharshit21/contextforge-ai/blob/main/docs/README.md
+    about: Installation, architecture, benchmark caveats, and platform verification notes.
+  - name: Security vulnerabilities
+    url: https://github.com/kulharshit21/contextforge-ai/blob/main/SECURITY.md
+    about: Report privately per SECURITY.md — do not open a public issue.

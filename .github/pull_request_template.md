@@ -2,6 +2,10 @@
 
 <!-- Describe the user-visible behavior and link a relevant issue. -->
 
+## AI assistance disclosure (if any)
+
+<!-- If AI tooling helped produce this change: state which parts, and how you reviewed and tested them. Leave "None" if not applicable. -->
+
 ## Verification
 
 - [ ] npm run typecheck

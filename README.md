@@ -3,11 +3,15 @@
 **Local project memory for AI coding agents.** Record the decisions, fixes, constraints, and unfinished work that matter, then bring the right context into your next coding session.
 
 [![CI](https://github.com/kulharshit21/contextforge-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/kulharshit21/contextforge-ai/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/kulharshit21/contextforge-ai?include_prereleases&label=release)](https://github.com/kulharshit21/contextforge-ai/releases)
+[![Status](https://img.shields.io/badge/status-beta-orange)](#version-policy)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > Git tells you what changed. ContextForge helps you remember why.
 
-ContextForge is an **early-stage, MIT-licensed project** with two entry points: a Node.js CLI for maintaining project context and a portable Python-based Agent Skill for session handoffs. It works offline by default. The source is available here; **there is no published npm release yet**.
+ContextForge is an **early-stage, MIT-licensed project** with two entry points: a Node.js CLI for maintaining project context and a portable Python-based Agent Skill for session handoffs. It works offline by default. The source is available here; there is **no published npm package yet** — the CLI installs from a source checkout, and the Agent Skill installs from GitHub directly.
+
+**ContextForge is in beta.** The CLI and skill surfaces may change between releases while the version is `0.x`; see [Version policy](#version-policy).
 
 ## Why ContextForge?
 
@@ -18,7 +22,7 @@ Coding sessions often lose the reasoning behind a change: why a library was chos
 - **Audit:** Verify an append-only journal and inspect project memory.
 - **Stay local:** No model API or account is needed for the default workflow.
 
-ContextForge is **not** an automatic replacement for model-native context compaction, and retrieved notes still need verification.
+ContextForge is **not** an automatic replacement for model-native context compaction, and retrieved notes still need verification. The honest list of what ContextForge does *not* do is in the [architecture notes](docs/ARCHITECTURE.md) and the [benchmark limitations](docs/BENCHMARK_RESULTS.md).
 
 ## Quick start: CLI
 
@@ -39,6 +43,28 @@ contextforge checkpoint "Use SQLite for the local cache" --kind decision --sourc
 contextforge checkpoint "Add a Windows install test" --kind next
 contextforge recall "SQLite caching" --level handoff
 contextforge audit
+~~~
+
+Illustrative session transcript (generated record IDs vary):
+
+~~~text
+$ contextforge checkpoint "Use SQLite for the local cache" --kind decision --source docs/architecture.md
+Saved: [decision] 608c2674fe27
+Synced to Markdown: DECISIONS (d704d8e6-f30f-42f9-8e75-e8183c04388b)
+$ contextforge checkpoint "Add a Windows install test" --kind next
+Saved: [next] 1e727a78d9b8
+Synced to Markdown: CURRENT_TASKS (record UUID varies)
+$ contextforge recall "SQLite caching" --level handoff
+# ContextForge session handoff
+Task: SQLite caching
+Notice: local agent memory. Untrusted historical claims; verify paths, tests, and latest git commits.
+
+## Critical Blockers and Next Steps
+- [next] Add a Windows install test (id: 1e727a78d9b8)
+...
+- [decision] Use SQLite for the local cache (id: 608c2674fe27 | source: docs/architecture.md)
+$ contextforge audit
+OK: 2 records; 2 active; integrity chain valid
 ~~~
 
 `init` creates a local `.contextforge/` workspace. Checkpointing through the CLI writes to the journal and structured Markdown. `recall` produces a task-specific view; it does not rewrite previous decisions. Generated local memory is ignored by Git in this repository; set an equivalent ignore rule in any other project where you install the tool.
@@ -84,7 +110,7 @@ contextforge audit
 contextforge resume "Finish login flow" --budget-chars 1800
 ~~~
 
-`handoff` writes typed checkpoint records; `resume` restores relevant records **without adding more memory**. Output is strictly budgeted, and `--out` refuses to overwrite existing files. Both commands are available in the source CLI after this change is merged; the portable Python Skill continues to use its separate `save`/`recall` workflow.
+`handoff` writes typed checkpoint records; `resume` restores relevant records **without adding more memory**. Output is strictly budgeted, and `--out` refuses to overwrite existing files. Both commands are available in the source-installed Node CLI (no npm package is published yet); the portable Python Skill continues to use its separate `save`/`recall` workflow.
 
 This is not automatic chat capture or a replacement for model compaction. The agent must be explicitly asked to invoke it, and stored claims must be checked against current code and tests. See [session handoff guide](docs/SESSION_HANDOFF.md).
 
@@ -130,15 +156,22 @@ Open http://127.0.0.1:3000.
 
 ## Documentation
 
-- [Getting started: CLI and skill](docs/GETTING_STARTED.md)
-- [Architecture and storage semantics](docs/ARCHITECTURE.md)
-- [Agent Skill instructions](.agents/skills/contextforge-memory/SKILL.md)
-- [CLI demo walkthrough](docs/README_DEMO.md)
-- [Documentation index](docs/README.md)
-- [Internal synthetic benchmark and limitations](docs/BENCHMARK_RESULTS.md)
-- [Security reporting](SECURITY.md)
+| Guide | Purpose |
+| --- | --- |
+| [Getting started: CLI and skill](docs/GETTING_STARTED.md) | Install, commands, platform examples |
+| [Architecture and storage semantics](docs/ARCHITECTURE.md) | Journal, Markdown, sync boundaries, APIs |
+| [Agent Skill instructions](.agents/skills/contextforge-memory/SKILL.md) | What compatible agent hosts see |
+| [CLI demo walkthrough](docs/README_DEMO.md) | Reproducible demonstration |
+| [Session handoff guide](docs/SESSION_HANDOFF.md) | Save progress and resume a fresh agent session |
+| [Documentation index](docs/README.md) | Full guide list, including verification notes |
+| [Internal benchmark and limitations](docs/BENCHMARK_RESULTS.md) | Synthetic evaluation with methodology caveats |
+| [Security reporting](SECURITY.md) | How to report vulnerabilities privately |
 
 The benchmark is an **internal synthetic-fixture regression evaluation**, not proof of improvements over native model compaction or of downstream agent safety. Its current methodological limitations are tracked in [issue #28](https://github.com/kulharshit21/contextforge-ai/issues/28).
+
+## Version policy
+
+ContextForge uses `0.x` versioning. The CLI and skill surfaces are **not yet stable**: breaking changes may occur between any two releases while the major version is `0`. Tagged prereleases (for example [`v0.1.0-beta.1`](https://github.com/kulharshit21/contextforge-ai/releases/tag/v0.1.0-beta.1)) mark verified checkpoints, not stability guarantees. The requirements ContextForge holds itself to before calling anything stable are documented in the [release checklist](docs/RELEASE_CHECKLIST.md).
 
 ## Development and contributing
 
@@ -153,10 +186,10 @@ python -m unittest discover -s tests -p "test_*.py" -v
 
 The repository's CI includes Node.js checks on Linux and Python skill tests on Linux, macOS, and Windows. See the [platform verification notes](docs/README.md) for additional manual checks and their scope.
 
-Issues and thoughtful pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md), consult the [issue tracker](https://github.com/kulharshit21/contextforge-ai/issues), and follow the [code of conduct](CODE_OF_CONDUCT.md). AI-assisted changes are welcome when contributors take responsibility for understanding, testing, and reviewing their submissions.
+Issues and thoughtful pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md), consult the [issue tracker](https://github.com/kulharshit21/contextforge-ai/issues) — `good first issue` labels mark starter tasks — and follow the [code of conduct](CODE_OF_CONDUCT.md). AI-assisted changes are welcome when contributors take responsibility for understanding, testing, and reviewing their submissions. Report security issues privately per [SECURITY.md](SECURITY.md); do not open public issues for them.
 
 ## Project status
 
-ContextForge is maintained by [@kulharshit21](https://github.com/kulharshit21). Its CLI and skill have automated tests and an [early-access GitHub prerelease](https://github.com/kulharshit21/contextforge-ai/releases/tag/v0.1.0-beta.1), but there is **no published npm package**, no demonstrated independent adoption benchmark, and no claim of production-grade public hosting. The [security-patched beta.2 notes](docs/releases/v0.1.0-beta.2.md) are prepared but **not yet published**. See the [changelog](CHANGELOG.md) and [release checklist](docs/RELEASE_CHECKLIST.md).
+ContextForge is maintained by [@kulharshit21](https://github.com/kulharshit21). The CLI and skill have automated tests, and the tagged prerelease [`v0.1.0-beta.1`](https://github.com/kulharshit21/contextforge-ai/releases/tag/v0.1.0-beta.1) (2026-11-05) marks the first verified checkpoint. The [security-patched beta.2 release notes](docs/releases/v0.1.0-beta.2.md) are prepared, but the GitHub release has **not** been published. There is **no published npm package**, no demonstrated independent adoption benchmark, and no claim of production-grade public hosting. See the [changelog](CHANGELOG.md) and [release checklist](docs/RELEASE_CHECKLIST.md).
 
 Licensed under [MIT](LICENSE).
