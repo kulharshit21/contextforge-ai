@@ -258,5 +258,70 @@ class AgentMemoryTests(unittest.TestCase):
         self.assertEqual(len(stamp), 14, stamp)
         self.assertTrue(stamp.isdigit(), stamp)
 
+    def test_repair_holds_writer_lock(self):
+        """Repair must serialize with save: an active lock blocks it, --break-lock overrides."""
+        self.invoke("save", "--kind", "fact", "--text", "Recoverable event")
+        with self.log.open("a", encoding="utf-8") as handle:
+            handle.write('{"v":1,"id":"tornwrite0000","kind":"fact","text":"torn" ')
+        lock_path = self.log.parent / ".writer-lock"
+        lock_path.write_text(json.dumps({"pid": os.getpid(), "timestamp": time.time()}), encoding="utf-8")
+        result = self.invoke("repair", status=2)
+        self.assertIn("writer lock exists", result.stderr)
+        # break-lock overrides and the repair completes with a backup.
+        broken = self.invoke("repair", "--break-lock")
+        self.assertIn("Backup created at:", broken.stdout)
+        self.assertIn("OK: 1 records", self.invoke("audit").stdout)
+
+    def test_repair_twice_within_same_second_succeeds(self):
+        """Two rapid repairs must not collide on the backup file name."""
+        self.invoke("save", "--kind", "fact", "--text", "Recoverable event")
+        for attempt in range(2):
+            with self.log.open("a", encoding="utf-8") as handle:
+                handle.write('{"v":1,"id":"tornwrite0000","kind":"fact","text":"torn" ')
+            result = self.invoke("repair")
+            self.assertIn("Backup created at:", result.stdout)
+        backups = list(self.log.parent.glob("events.jsonl.bak.*"))
+        self.assertEqual(len(backups), 2, "each repair must keep its own backup")
+        self.assertIn("OK:", self.invoke("audit").stdout)
+
+    def test_stdin_note_past_read_window_is_rejected_loudly(self):
+        """An oversized multi-line stdin note is rejected, not silently truncated."""
+        self.invoke("save", "--kind", "fact", "--text", "Seed event")
+        note = "y" * 3990 + "\n" * 106 + "TAIL" * 40
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--root", str(self.root),
+             "save", "--kind", "fact", "--stdin"],
+            input=note, capture_output=True, text=True, encoding="utf-8",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("4000", result.stderr)
+        records = [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines() if line.strip()]
+        self.assertEqual([r for r in records if "TAIL" in r.get("text", "")], [],
+                         "truncated content must not be stored")
+
+    def test_stdin_multiline_note_with_trailing_blank_lines_round_trips(self):
+        """A within-limit multi-line paste ending in blank lines is stored in full."""
+        note = "line one\nline two\n\n\n"
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--root", str(self.root),
+             "save", "--kind", "fact", "--stdin"],
+            input=note, capture_output=True, text=True, encoding="utf-8",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        records = [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines() if line.strip()]
+        stored = [r["text"] for r in records if r["kind"] == "fact"]
+        self.assertIn("line one\nline two", stored)
+
+    @unittest.skipIf(os.name == "nt", "closing fd 0 requires a POSIX shell redirect")
+    def test_closed_stdin_fails_cleanly(self):
+        result = subprocess.run(
+            f'"{sys.executable}" "{SCRIPT}" --root "{self.root}" save --kind fact --stdin 0<&-',
+            shell=True, capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("ContextForge error:", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

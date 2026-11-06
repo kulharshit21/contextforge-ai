@@ -301,66 +301,86 @@ def repair_storage(path: Path, break_lock: bool = False) -> tuple[int, int, str 
     Returns (valid_records_count, truncated_lines_count, backup_path_or_none).
     """
     prepare(path)
-    if lock_at(path).exists():
-        clear_lock(path, force=break_lock)
-    log = events_at(path)
-    if not log.exists():
-        return 0, 0, None
+    # Hold the same writer lock save uses across the entire read -> backup ->
+    # rebuild sequence. Without it, an append committed between the backup
+    # rename (when events.jsonl is absent) and the reconstruction write is
+    # silently clobbered; Node fixed the identical hazard in its repair.
+    marker = acquire_lock(path, break_lock=break_lock)
+    try:
+        log = events_at(path)
+        if not log.exists():
+            return 0, 0, None
 
-    valid_events = []
-    truncated_count = 0
-    previous = "0" * 64
-    has_corruption = False
+        valid_events = []
+        truncated_count = 0
+        previous = "0" * 64
+        has_corruption = False
 
-    with log.open("r", encoding="utf-8-sig") as handle:
-        for number, raw in enumerate(handle, 1):
-            if not raw.strip():
-                continue
-            if has_corruption:
-                truncated_count += 1
-                continue
-            try:
-                event = json.loads(raw)
-                if not isinstance(event, dict) or event.get("v") != VERSION:
-                    has_corruption = True
+        with log.open("r", encoding="utf-8-sig") as handle:
+            for number, raw in enumerate(handle, 1):
+                if not raw.strip():
+                    continue
+                if has_corruption:
                     truncated_count += 1
                     continue
-                supplied = event.get("digest")
-                payload = {k: v for k, v in event.items() if k != "digest"}
-                if event.get("previous") != previous or supplied != digest(payload):
+                try:
+                    event = json.loads(raw)
+                    if not isinstance(event, dict) or event.get("v") != VERSION:
+                        has_corruption = True
+                        truncated_count += 1
+                        continue
+                    supplied = event.get("digest")
+                    payload = {k: v for k, v in event.items() if k != "digest"}
+                    if event.get("previous") != previous or supplied != digest(payload):
+                        has_corruption = True
+                        truncated_count += 1
+                        continue
+                    if (event.get("kind") not in KINDS or not VALID_ID.fullmatch(str(event.get("id", "")))
+                            or not isinstance(event.get("text"), str)):
+                        has_corruption = True
+                        truncated_count += 1
+                        continue
+                    previous = supplied
+                    valid_events.append(event)
+                except Exception:
                     has_corruption = True
                     truncated_count += 1
-                    continue
-                if (event.get("kind") not in KINDS or not VALID_ID.fullmatch(str(event.get("id", "")))
-                        or not isinstance(event.get("text"), str)):
-                    has_corruption = True
-                    truncated_count += 1
-                    continue
-                previous = supplied
-                valid_events.append(event)
-            except Exception:
-                has_corruption = True
-                truncated_count += 1
 
-    backup_name = None
-    if has_corruption:
-        # Match the Node CLI's backup timestamp format for operator familiarity.
-        ts_str = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-        backup_path = path / f"events.jsonl.bak.{ts_str}"
-        log.rename(backup_path)
-        backup_name = str(backup_path)
+        backup_name = None
+        if has_corruption:
+            # Match the Node CLI's backup timestamp format for operator familiarity.
+            ts_str = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+            backup_path = path / f"events.jsonl.bak.{ts_str}"
+            # Two repairs within the same second must not fail on Windows,
+            # where rename refuses to overwrite an existing backup.
+            suffix = 0
+            while True:
+                candidate = backup_path if suffix == 0 else path / f"events.jsonl.bak.{ts_str}-{suffix}"
+                try:
+                    log.rename(candidate)
+                    backup_path = candidate
+                    break
+                except FileExistsError:
+                    suffix += 1
+            backup_name = str(backup_path)
 
-        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
-        if hasattr(os, "O_NOFOLLOW"):
-            flags |= os.O_NOFOLLOW
-        fd = os.open(log, flags, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as out:
-            for event in valid_events:
-                out.write(json.dumps(event, sort_keys=True, ensure_ascii=False) + "\n")
-            out.flush()
-            os.fsync(out.fileno())
+            # Rebuild through a temp file + atomic replace so the journal is
+            # never absent or half-written during the swap.
+            temp_path = path / f"events.jsonl.repair-{os.getpid()}.tmp"
+            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+            if hasattr(os, "O_NOFOLLOW"):
+                flags |= os.O_NOFOLLOW
+            fd = os.open(temp_path, flags, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as out:
+                for event in valid_events:
+                    out.write(json.dumps(event, sort_keys=True, ensure_ascii=False) + "\n")
+                out.flush()
+                os.fsync(out.fileno())
+            os.replace(temp_path, log)
 
-    return len(valid_events), truncated_count, backup_name
+        return len(valid_events), truncated_count, backup_name
+    finally:
+        marker.unlink(missing_ok=True)
 
 def force_utf8_stdio() -> None:
     """Pin stdio to UTF-8 regardless of console code page.
@@ -413,8 +433,18 @@ def main(argv: list[str] | None = None) -> int:
             # (the normal `echo note | save --stdin` case) does not push a
             # 4000-char note over the limit; validation runs on the stripped
             # note for stdin input while --text keeps Node-identical raw checks.
-            note = sys.stdin.read(4096) if args.stdin else args.text
-            refuse_sensitive(note.strip() if args.stdin else note)
+            if args.stdin:
+                if sys.stdin is None:
+                    raise ValueError("Standard input is unavailable; use --text instead")
+                # Read to EOF: a bounded read(4096) silently dropped everything
+                # past the window when a long paste carried trailing blank
+                # lines. The 4000-char limit still rejects oversized notes
+                # loudly instead of truncating them silently.
+                note = sys.stdin.read()
+                refuse_sensitive(note.strip())
+            else:
+                note = args.text
+                refuse_sensitive(note)
             if args.source:
                 if any(ord(c) < 32 and c not in "\t" for c in args.source):
                     raise ValueError("Source reference contains invalid control characters or newlines")

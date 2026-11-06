@@ -4,6 +4,12 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Closed the Python Skill's repair-time data-loss window and stdin edge cases (all reproduced before fixing):
+  - `repair` now holds the same writer lock `save` uses across the entire read → backup → rebuild sequence and rebuilds through a temp file + atomic replace. Previously the backup-rename window let a concurrent `save` be silently clobbered — the identical hazard fixed in the Node CLI.
+  - Two `repair` runs within the same second no longer collide on the backup file name (Windows rename refuses to overwrite; a unique suffix is chosen instead of failing while the log is still corrupt).
+  - `save --stdin` reads to EOF: a bounded read silently dropped everything past 4096 characters when a long paste carried trailing blank lines. The 4000-character limit still rejects oversized notes loudly instead of truncating them silently.
+  - `save --stdin` with a closed standard input fails with the normal one-line error instead of a raw traceback.
+
 - Added explicit session handoff commands (`contextforge handoff` and `contextforge resume`) for saving verified successes, failed attempts, test results, blockers and next actions, then recovering a task-specific brief from a later session. No automatic chat scraping or hidden model calls; budgets are enforced and output-file overwrites are refused. Added safety and two-session regression tests and documentation.
 
 - Hardened the remaining dashboard API routes and removed dead secret handling (follow-up to the API boundary work):
