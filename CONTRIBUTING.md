@@ -32,6 +32,14 @@ Node.js 24 is the reference CI runtime. Avoid changing the lockfile unless depen
 
 Use the PR template, allow the CI workflow to complete, and address feedback in the review thread. A merged PR is not an automatic promise of maintainership.
 
+## Pull request titles
+
+PRs are squash-merged, so the PR title becomes the commit message. Title PRs in the form the project already uses — `type(scope): short imperative summary` — for example `fix(memory): close data-loss paths in repair`, `feat(skill): add lifecycle commands`, `docs: restructure README`. Keep the summary lowercase without a trailing period. This keeps `CHANGELOG.md` and release notes readable without extra tooling.
+
+## Starter tasks
+
+Issues labeled `good first issue` are scoped for a first contribution and link to the relevant code paths. If an issue labeled `help wanted` interests you, comment before starting so work is not duplicated.
+
 ## Branch protection and merge policy
 
 - The `main` branch is protected by an enforced GitHub branch ruleset. Direct pushes and force pushes to `main` are blocked.

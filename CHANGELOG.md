@@ -2,6 +2,11 @@
 
 This project follows the general structure of Keep a Changelog. Versions below are milestones, not proof that an npm package has been published.
 
+## v0.1.0-beta.1 — Verified Early Access (2026-11-05)
+
+- First tagged prerelease, marking a verified checkpoint of the CLI, Agent Skill, and dashboard. See the [release notes](https://github.com/kulharshit21/contextforge-ai/releases/tag/v0.1.0-beta.1) for scope and the [release checklist](docs/RELEASE_CHECKLIST.md) for what a stable release requires. This is a beta: the CLI and skill surfaces may change between releases while the version is `0.x`.
+- Everything under "Unreleased" below postdates this checkpoint.
+
 ## Unreleased
 
 - Added explicit session handoff commands (`contextforge handoff` and `contextforge resume`) for saving verified successes, failed attempts, test results, blockers and next actions, then recovering a task-specific brief from a later session. No automatic chat scraping or hidden model calls; budgets are enforced and output-file overwrites are refused. Added safety and two-session regression tests and documentation.
