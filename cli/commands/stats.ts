@@ -16,9 +16,15 @@ export async function runStatsCommand(workspaceRoot = process.cwd()) {
     })
     .map((file) => file.file_key);
 
-  const approximateSavings = capsules.reduce(
-    (total, capsule) => total + (capsule.estimatedRawTokens - capsule.estimatedCapsuleTokens),
+  // Per-capsule estimates can legitimately be negative (the rendered capsule
+  // includes boilerplate); report the aggregate floored at zero rather than
+  // advertising negative savings.
+  const approximateSavings = Math.max(
     0,
+    capsules.reduce(
+      (total, capsule) => total + (capsule.estimatedRawTokens - capsule.estimatedCapsuleTokens),
+      0,
+    ),
   );
 
   console.log(`Memory files: ${memoryFiles.length}`);

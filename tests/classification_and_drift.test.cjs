@@ -104,6 +104,13 @@ test("note classification handles mixed decision, bug, API, and rule wording wit
 
 test("drift detection flags missing scripts, missing file paths, framework mismatches, and undocumented env vars", (t) => {
   const root = temporaryProject(t);
+  // Make the scan detect Next.js so framework comparisons have a detected
+  // framework to compare against.
+  fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({
+    name: "contextforge-drift-fixture",
+    scripts: { test: "node --test" },
+    dependencies: { next: "16.0.0" },
+  }));
   checkedCli(root, "init");
   checkedCli(root, "scan");
 
@@ -120,8 +127,13 @@ test("drift detection flags missing scripts, missing file paths, framework misma
   // 2. Introduce framework mismatch drift: reference Express while repo scan is Next.js
   checkedCli(root, "remember", "The backend is built using Express framework for routing.");
   const doctorWithFrameworkDrift = checkedCli(root, "doctor");
-  assert.match(doctorWithFrameworkDrift, /Memory mentions Express, repo scan says/);
+  assert.match(doctorWithFrameworkDrift, /Memory mentions Express, repo scan says Next\.js/);
   assert.match(doctorWithFrameworkDrift, /high/);
+
+  // 2b. Comparison notes naming BOTH frameworks are decisions, not drift.
+  checkedCli(root, "remember", "We chose Next.js over Express because the team knows React server components.");
+  const doctorAfterComparison = checkedCli(root, "doctor");
+  assert.doesNotMatch(doctorAfterComparison, /Memory mentions Express/);
 
   // 3. Introduce undocumented environment variable drift
   checkedCli(root, "remember", "Configure CONTEXTFORGE_SECRET_TOKEN in local config.");

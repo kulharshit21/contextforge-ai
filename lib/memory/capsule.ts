@@ -75,6 +75,15 @@ function buildSummary(task: string, items: MemoryItem[], repoScan: RepoScan) {
   return summaryParts.join(" ");
 }
 
+// Memory text may itself contain triple backticks, which would close a
+// ```md fence early and let the rest of the prompt render as ordinary
+// markdown. Pick a fence longer than any run of backticks in the content.
+export function fencedMarkdown(content: string): string[] {
+  const longestRun = Math.max(3, ...(content.match(/`{3,}/g) ?? []).map((run) => run.length));
+  const fence = "`".repeat(longestRun + 1);
+  return [fence + "md", content, fence];
+}
+
 export function renderCapsuleMarkdown(task: string, capsule: Capsule) {
   return [
     `# Context Capsule: ${task}`,
@@ -109,9 +118,7 @@ export function renderCapsuleMarkdown(task: string, capsule: Capsule) {
     "",
     "## AI-Agent Prompt",
     "",
-    "```md",
-    capsule.agent_prompt,
-    "```",
+    ...fencedMarkdown(capsule.agent_prompt),
     "",
     `Estimated context reduction: ${capsule.saved_percent}%`,
   ].join("\n");

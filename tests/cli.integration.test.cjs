@@ -95,6 +95,10 @@ test("scan, capsule, doctor, stats, and agent exports work offline", (t) => {
   for (const name of ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "CONTEXTFORGE_CAPSULE.md"]) {
     assert.ok(fs.existsSync(path.join(root, name)), name + " export missing");
   }
+  const capsuleExport = fs.readFileSync(path.join(root, "CONTEXTFORGE_CAPSULE.md"), "utf8");
+  assert.match(capsuleExport, /Document setup and avoid old bugs/,
+    "exported capsule must reflect the latest saved capsule, not the placeholder");
+  assert.doesNotMatch(capsuleExport, /No capsule has been generated yet/);
   assert.ok(fs.existsSync(path.join(root, ".github/copilot-instructions.md")));
 });
 

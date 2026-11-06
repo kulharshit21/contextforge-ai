@@ -2,6 +2,7 @@ import path from "node:path";
 import { writeFile } from "node:fs/promises";
 
 import { calculateMemoryHealthScore } from "../../lib/memory/drift";
+import { createDeterministicCapsule } from "../../lib/memory/capsule";
 import { generateExports } from "../../lib/memory/export";
 import {
   listSavedCapsules,
@@ -17,12 +18,18 @@ export async function runExportCommand(
   const memoryFiles = await loadMemoryFiles(workspaceRoot);
   const repoScan = await readRepoScan(workspaceRoot);
   const capsules = await listSavedCapsules(workspaceRoot);
+  // Regenerate the latest saved capsule deterministically so the exported
+  // CONTEXTFORGE_CAPSULE.md reflects real memory instead of a placeholder
+  // (the dashboard path does the same via generateProjectExports).
+  const latestCapsule = capsules[0]
+    ? createDeterministicCapsule(capsules[0].task, memoryFiles, repoScan)
+    : null;
   const exportsBundle = generateExports({
     projectName: path.basename(workspaceRoot),
     projectDescription: "ContextForge local export bundle",
     memoryFiles,
     repoScan,
-    latestCapsule: null,
+    latestCapsule,
     driftIssues: [],
   });
 
