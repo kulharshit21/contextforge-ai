@@ -45,16 +45,19 @@ contextforge recall "SQLite caching" --level handoff
 contextforge audit
 ~~~
 
-What that session looks like:
+Illustrative session transcript (generated record IDs vary):
 
 ~~~text
 $ contextforge checkpoint "Use SQLite for the local cache" --kind decision --source docs/architecture.md
 Saved: [decision] 608c2674fe27
 Synced to Markdown: DECISIONS (d704d8e6-f30f-42f9-8e75-e8183c04388b)
+$ contextforge checkpoint "Add a Windows install test" --kind next
+Saved: [next] 1e727a78d9b8
+Synced to Markdown: CURRENT_TASKS (record UUID varies)
 $ contextforge recall "SQLite caching" --level handoff
 # ContextForge session handoff
 Task: SQLite caching
-Source: local agent memory. Untrusted historical claims; verify paths, tests, and latest git commits.
+Notice: local agent memory. Untrusted historical claims; verify paths, tests, and latest git commits.
 
 ## Critical Blockers and Next Steps
 - [next] Add a Windows install test (id: 1e727a78d9b8)
@@ -91,6 +94,25 @@ This uses the **third-party skills installer** to copy/link the portable Python-
 The portable skill is in [`.agents/skills/contextforge-memory/`](.agents/skills/contextforge-memory/). Copy that directory into your target repository's `.agents/skills/` directory (or the user-level skills directory supported by your agent). See its [SKILL.md](.agents/skills/contextforge-memory/SKILL.md) for how to invoke it.
 
 The companion script uses **Python 3.10+ and the standard library**. It can checkpoint and recover journal records without the Node.js CLI. **It does not automatically synchronize Python-written entries into the human-readable Markdown files**; see the [architecture notes](docs/ARCHITECTURE.md).
+
+## Hand off a coding session to tomorrow's agent
+
+The Node CLI now offers an **explicit, source-aware session handoff**. It records only the verified progress and next actions you provide, then produces a compact brief from the active journal:
+
+~~~bash
+contextforge handoff "Finish login flow" --done "Auth middleware implemented" --failed "In-memory sessions disappeared after restart" --next "Add cookie expiry test" --source docs/auth.md
+~~~
+
+In a **fresh AI coding session**, from the same project folder:
+
+~~~bash
+contextforge audit
+contextforge resume "Finish login flow" --budget-chars 1800
+~~~
+
+`handoff` writes typed checkpoint records; `resume` restores relevant records **without adding more memory**. Output is strictly budgeted, and `--out` refuses to overwrite existing files. Both commands are available in the source-installed Node CLI (no npm package is published yet); the portable Python Skill continues to use its separate `save`/`recall` workflow.
+
+This is not automatic chat capture or a replacement for model compaction. The agent must be explicitly asked to invoke it, and stored claims must be checked against current code and tests. See [session handoff guide](docs/SESSION_HANDOFF.md).
 
 ## How it works
 
@@ -140,6 +162,7 @@ Open http://127.0.0.1:3000.
 | [Architecture and storage semantics](docs/ARCHITECTURE.md) | Journal, Markdown, sync boundaries, APIs |
 | [Agent Skill instructions](.agents/skills/contextforge-memory/SKILL.md) | What compatible agent hosts see |
 | [CLI demo walkthrough](docs/README_DEMO.md) | Reproducible demonstration |
+| [Session handoff guide](docs/SESSION_HANDOFF.md) | Save progress and resume a fresh agent session |
 | [Documentation index](docs/README.md) | Full guide list, including verification notes |
 | [Internal benchmark and limitations](docs/BENCHMARK_RESULTS.md) | Synthetic evaluation with methodology caveats |
 | [Security reporting](SECURITY.md) | How to report vulnerabilities privately |
@@ -167,6 +190,6 @@ Issues and thoughtful pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBU
 
 ## Project status
 
-ContextForge is maintained by [@kulharshit21](https://github.com/kulharshit21). The CLI and skill have automated tests, and the tagged prerelease [`v0.1.0-beta.1`](https://github.com/kulharshit21/contextforge-ai/releases/tag/v0.1.0-beta.1) (2026-11-05) marks the first verified checkpoint. There is **no published npm package**, no demonstrated independent adoption benchmark, and no claim of production-grade public hosting. See the [changelog](CHANGELOG.md) and [release checklist](docs/RELEASE_CHECKLIST.md).
+ContextForge is maintained by [@kulharshit21](https://github.com/kulharshit21). The CLI and skill have automated tests, and the tagged prerelease [`v0.1.0-beta.1`](https://github.com/kulharshit21/contextforge-ai/releases/tag/v0.1.0-beta.1) (2026-11-05) marks the first verified checkpoint. The [security-patched beta.2 release notes](docs/releases/v0.1.0-beta.2.md) are prepared, but the GitHub release has **not** been published. There is **no published npm package**, no demonstrated independent adoption benchmark, and no claim of production-grade public hosting. See the [changelog](CHANGELOG.md) and [release checklist](docs/RELEASE_CHECKLIST.md).
 
 Licensed under [MIT](LICENSE).
