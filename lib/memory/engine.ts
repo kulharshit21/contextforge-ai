@@ -16,9 +16,11 @@ import {
 import { slugify } from "../utils/slug";
 
 import {
+  acquireWriterLock,
   appendJournalEvent,
   auditJournal,
   readJournalEvents,
+  releaseWriterLock,
   repairJournal,
 } from "./journal";
 import { parseMemoryFile, renderMemoryFile } from "./markdown";
@@ -463,24 +465,34 @@ export async function appendMemoryItem(
   fileKey: MemoryFileKey,
   itemInput: Omit<MemoryItem, "id" | "created_at" | "updated_at">,
 ) {
-  const file = await loadMemoryFile(workspaceRoot, fileKey);
-  const timestamp = isoNow();
   const item: MemoryItem = {
     id: randomUUID(),
-    created_at: timestamp,
-    updated_at: timestamp,
+    created_at: isoNow(),
+    updated_at: isoNow(),
     ...itemInput,
   };
 
-  const nextFile: MemoryFile = {
-    ...file,
-    summary: updateSummary(file.summary, item),
-    items: [item, ...file.items].slice(0, 50),
-    version: file.version + 1,
-    updated_at: timestamp,
-  };
+  // The Markdown mirror is a full-file read-modify-write; hold the writer
+  // lock around it so concurrent writers (CLI + dashboard + skill) cannot
+  // overwrite each other's entries.
+  await acquireWriterLock(workspaceRoot, false);
+  try {
+    const file = await loadMemoryFile(workspaceRoot, fileKey);
+    const timestamp = isoNow();
 
-  await saveMemoryFile(workspaceRoot, nextFile);
+    const nextFile: MemoryFile = {
+      ...file,
+      summary: updateSummary(file.summary, item),
+      items: [item, ...file.items].slice(0, 50),
+      version: file.version + 1,
+      updated_at: timestamp,
+    };
+
+    await saveMemoryFile(workspaceRoot, nextFile);
+  } finally {
+    await releaseWriterLock(workspaceRoot);
+  }
+
   return item;
 }
 
@@ -632,29 +644,35 @@ export async function syncMemory(workspaceRoot: string): Promise<{
   await initWorkspace(workspaceRoot);
   const memoryFiles = await loadMemoryFiles(workspaceRoot);
   const journalEvents = await readJournalEvents(workspaceRoot);
+  const knownTexts = new Set(journalEvents.map((e) => e.text.trim()));
 
   let importedToJournal = 0;
   for (const file of memoryFiles) {
     const defaultKind = FILE_KEY_TO_KIND[file.file_key] || "fact";
     for (const item of file.items) {
-      const exists = journalEvents.some(
-        (e) => e.text.trim() === item.content.trim(),
-      );
-      if (!exists && item.content.trim()) {
-        try {
-          const kind = (JOURNAL_EVENT_KINDS.includes(item.type as JournalEventKind)
-            ? (item.type as JournalEventKind)
-            : defaultKind);
-          await appendJournalEvent(workspaceRoot, {
-            kind,
-            text: item.content,
-            source: item.source || `${file.file_key}.md`,
-            tags: item.tags,
-          });
+      const text = item.content.trim();
+      // The known-text set is refreshed with every append so the same content
+      // appearing in multiple memory files is imported exactly once and the
+      // reported count matches the events actually created.
+      if (!text || knownTexts.has(text)) {
+        continue;
+      }
+      try {
+        const kind = (JOURNAL_EVENT_KINDS.includes(item.type as JournalEventKind)
+          ? (item.type as JournalEventKind)
+          : defaultKind);
+        const { created } = await appendJournalEvent(workspaceRoot, {
+          kind,
+          text: item.content,
+          source: item.source || `${file.file_key}.md`,
+          tags: item.tags,
+        });
+        knownTexts.add(text);
+        if (created) {
           importedToJournal++;
-        } catch {
-          // ignore invalid or sensitive item imports
         }
+      } catch {
+        // ignore invalid or sensitive item imports
       }
     }
   }
@@ -675,6 +693,17 @@ export async function mergeExtractedMemory(
     const fileKey = SECTION_TO_FILE_KEY[section];
 
     for (const entry of entries) {
+      // Journal each entry as well: recall reads only the journal, and the
+      // Markdown mirror caps its items at 50 per file. Without a journal
+      // record, ingested memories are invisible to recall and can be lost
+      // permanently once they age out of the mirror.
+      const kind = FILE_KEY_TO_KIND[fileKey] || "fact";
+      await appendJournalEvent(workspaceRoot, {
+        kind,
+        text: entry.content,
+        source: entry.source || source,
+        tags: entry.tags,
+      });
       const item = await appendMemoryItem(workspaceRoot, fileKey, {
         type: section,
         title: entry.title,

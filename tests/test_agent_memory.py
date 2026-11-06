@@ -21,7 +21,8 @@ class AgentMemoryTests(unittest.TestCase):
     def invoke(self, *arguments, status=0):
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--root", str(self.root), *arguments],
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            check=False,
         )
         self.assertEqual(result.returncode, status, result.stdout + result.stderr)
         return result
@@ -190,6 +191,72 @@ class AgentMemoryTests(unittest.TestCase):
         result = subprocess.run([sys.executable, str(SCRIPT), "--root", str(missing), "init"],
                                 capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
+
+    def test_recall_rejects_task_larger_than_budget(self):
+        """Parity with the Node CLI: the header itself must fit the budget."""
+        self.invoke("save", "--kind", "decision", "--text", "Use SQLite for the local cache")
+        oversized_task = "x" * 2000
+        result = self.invoke("recall", "--task", oversized_task,
+                             "--budget-chars", "600", status=2)
+        self.assertIn("Task description is too long", result.stderr)
+        self.assertLessEqual(len(result.stdout), 600)
+
+    def test_recall_accepts_node_budget_floor(self):
+        """The 500-char floor matches the Node CLI (previously 600 here)."""
+        self.invoke("save", "--kind", "decision", "--text", "Compact decision note")
+        response = self.invoke("recall", "--task", "decision",
+                               "--budget-chars", "550")
+        self.assertIn("Compact decision note", response.stdout)
+
+    def test_non_ascii_recall_survives_piped_output(self):
+        """Piped stdout must be UTF-8 regardless of the console code page."""
+        note = "café naïve 日本語 note"
+        self.invoke("save", "--kind", "fact", "--text", note)
+        # text=True decodes whatever bytes the child wrote; the child now
+        # reconfigures stdio to UTF-8, so the note must round-trip intact.
+        response = self.invoke("recall", "--task", "note")
+        self.assertIn(note, response.stdout)
+        self.assertNotIn("charmap", response.stderr)
+
+    def test_stdin_note_round_trips_utf8(self):
+        """UTF-8 stdin bytes must not be decoded through a legacy code page."""
+        note = "café naïve 日本語 stdin note"
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--root", str(self.root),
+             "save", "--kind", "fact", "--stdin"],
+            input=note, capture_output=True, text=True, encoding="utf-8",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        records = [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines() if line.strip()]
+        stored = [r["text"] for r in records if r["kind"] == "fact"]
+        self.assertIn(note, stored)
+
+    def test_stdin_allows_trailing_newline_at_limit(self):
+        """A 4000-char stdin note with the usual trailing newline is accepted."""
+        note = "y" * 4000
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--root", str(self.root),
+             "save", "--kind", "fact", "--stdin"],
+            input=note + "\n", capture_output=True, text=True, encoding="utf-8",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_sensitive_tokens_with_accented_prefix_are_refused(self):
+        """ASCII word boundaries match the Node detector: é is not a word char."""
+        fake = "ésk_" + "A" * 18
+        self.invoke("save", "--kind", "fact", "--text", "token " + fake, status=2)
+
+    def test_repair_backup_uses_node_timestamp_format(self):
+        self.invoke("save", "--kind", "fact", "--text", "Recoverable event")
+        with self.log.open("a", encoding="utf-8") as handle:
+            handle.write('{"v":1,"id":"tornwrite0000","kind":"fact","text":"torn" ')
+        result = self.invoke("repair")
+        self.assertIn("Backup created at:", result.stdout)
+        backups = list(self.log.parent.glob("events.jsonl.bak.*"))
+        self.assertEqual(len(backups), 1)
+        stamp = backups[0].name.removeprefix("events.jsonl.bak.")
+        self.assertEqual(len(stamp), 14, stamp)
+        self.assertTrue(stamp.isdigit(), stamp)
 
 if __name__ == "__main__":
     unittest.main()

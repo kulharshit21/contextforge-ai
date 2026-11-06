@@ -12,6 +12,21 @@ This project follows the general structure of Keep a Changelog. Versions below a
   - One corrupt capsule file no longer replaces the entire project snapshot with demo data; unreadable capsules are skipped with a warning.
   - Fixed duplicate React keys on user/LLM-derived content in the project detail page.
 
+- Fixed Python Skill reliability and Node parity issues (verified by reproduction):
+  - `recall` now enforces the strict budget like the Node CLI: an oversized `--task` header fails with "Task description is too long for the requested context budget" instead of silently emitting output up to 3.75× the requested budget. The budget floor also aligns to 500 characters (was 600).
+  - The skill pins stdio to UTF-8: piped `recall` of non-ASCII notes no longer crashes with a cp1252 `charmap` encode error on Windows, and `save --stdin` no longer stores mojibake for UTF-8 input.
+  - stdin accepts the normal trailing-newline form of a 4000-character note (read limit 4096, length checked after stripping) instead of rejecting it at 3999.
+  - Secret-pattern detection uses ASCII word boundaries like the Node detector, so tokens prefixed with accented characters (e.g. `ésk_…`) are refused consistently.
+  - Repair backup timestamps match the Node CLI format (`events.jsonl.bak.YYYYMMDDHHMMSS`).
+  - The benchmark harness serializes `source`/`supersedes` as `""` instead of `null` (the Node journal schema rejected harness-written workspaces), raises on child-process recall failures instead of recording silent zero scores, decodes child output as UTF-8, and validates the CLI budget argument.
+
+- Closed memory data-loss paths in the Node engine (verified by reproduction):
+  - `contextforge repair` now holds the journal writer lock across its entire read→backup→rebuild sequence and swaps the rebuilt journal in atomically. Previously the backup-rename window left `events.jsonl` absent; an append committed in that gap was silently overwritten (reproduced: the committed event existed in neither the journal nor the backup).
+  - `contextforge ingest-chat` (and dashboard chat ingest) now journal every extracted entry in addition to the Markdown mirror. Recall reads only the journal, so previously ingested memories were invisible to `recall` until a manual `sync`, and any item aged out of the mirror's 50-item-per-file cap was permanently lost.
+  - Markdown mirror updates now hold the writer lock; concurrent writers surface a clear "Memory writer lock exists" error instead of silently overwriting each other's entries (last-writer-wins data loss).
+  - Hand-edited memory files containing unquoted YAML timestamps (`updated_at: 2026-11-06`) no longer crash every memory command with a raw ZodError; dates are normalized to ISO strings.
+  - `contextforge sync` now counts only journal events actually created and de-duplicates by text across memory files, so identical content in two files no longer produces two journal events.
+
 - Hardened dashboard API filesystem boundaries (local, unauthenticated endpoints):
   - `PUT /api/memory` now validates `fileKey` at runtime with zod. Previously a request with a traversal value such as `../../../../name` (accepted despite the TypeScript union type) could write attacker-controlled `.md` files outside the project workspace, including overwriting unrelated repositories' agent instruction files.
   - `saveMemoryFile`/`saveMemoryFileRaw` reject unknown memory file keys before path construction, closing the same hole for any non-HTTP caller.
