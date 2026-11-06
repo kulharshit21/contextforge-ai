@@ -10,8 +10,10 @@ ContextForge compiles project memory for coding agents.
 
 ## Useful Commands
 
-- `npx contextforge init`
-- `npx contextforge scan`
-- `npx contextforge capsule "task"`
-- `npx contextforge export --all`
-- `npx contextforge doctor`
+The CLI is installed from a source checkout (`npm ci` + `npm link`; see [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)). There is no published npm package, so `npx contextforge` does not work.
+
+- `contextforge init`
+- `contextforge scan`
+- `contextforge capsule "task"`
+- `contextforge export --all`
+- `contextforge doctor`

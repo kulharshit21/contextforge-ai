@@ -9,6 +9,8 @@ This directory contains detailed guidance for people using, evaluating, contribu
 | [Getting started](GETTING_STARTED.md) | Install and use the source-linked CLI or Agent Skill |
 | [Architecture](ARCHITECTURE.md) | Understand the journal, Markdown, sync boundaries, APIs and local dashboard |
 | [Agent Skill](../.agents/skills/contextforge-memory/SKILL.md) | Instructions available to compatible agent hosts |
+| [Session handoff guide](SESSION_HANDOFF.md) | Close one coding session with `handoff`, resume the next with `resume` |
+| [Skill installation validation](SKILL_INSTALL_VALIDATION.md) | Platform-by-platform status of Agent Skill installation checks |
 | [Demo walkthrough](README_DEMO.md) | Reproducible CLI and seeded dashboard demonstration |
 | [Sample outputs](demo/) | Non-sensitive illustrative project memory and capsule |
 
