@@ -7,6 +7,7 @@ import { runCapsuleCommand } from "./commands/capsule";
 import { runCheckpointCommand, type CheckpointCommandOptions } from "./commands/checkpoint";
 import { runDoctorCommand } from "./commands/doctor";
 import { runExportCommand } from "./commands/export";
+import { runHandoffCommand, runResumeCommand, type HandoffCommandOptions, type ResumeCommandOptions } from "./commands/handoff";
 import { runIngestChatCommand } from "./commands/ingest-chat";
 import { runInitCommand } from "./commands/init";
 import { runRecallCommand, type RecallCommandOptions } from "./commands/recall";
@@ -60,6 +61,28 @@ program
   .action((task: string, options: RecallCommandOptions) => {
     return runRecallCommand(task, options);
   });
+
+program
+  .command("handoff")
+  .description("Checkpoint verified session progress and produce a budget-bounded next-session handoff")
+  .argument("<task>", "task being handed off (1-200 characters)")
+  .option("--done <text>", "work completed or important milestone")
+  .option("--failed <text>", "failed approach and why it failed")
+  .option("--test <text>", "verified test command and result")
+  .option("--blocker <text>", "unresolved blocker")
+  .option("--next <text>", "next concrete action")
+  .option("--source <source>", "evidence reference used by all new notes")
+  .option("--budget-chars <budget>", "strict output character budget (default: 1800)")
+  .option("--out <file>", "write handoff to a new file (refuses overwrite)")
+  .action((task: string, options: HandoffCommandOptions) => runHandoffCommand(task, options));
+
+program
+  .command("resume")
+  .description("Recover a bounded handoff from the existing local journal without adding records")
+  .argument("[task]", "task to resume", "")
+  .option("--budget-chars <budget>", "strict output character budget (default: 1800)")
+  .option("--out <file>", "write context to a new file (refuses overwrite)")
+  .action((task: string, options: ResumeCommandOptions) => runResumeCommand(task, options));
 
 program
   .command("audit")

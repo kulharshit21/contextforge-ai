@@ -4,6 +4,8 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Added explicit session handoff commands (`contextforge handoff` and `contextforge resume`) for saving verified successes, failed attempts, test results, blockers and next actions, then recovering a task-specific brief from a later session. No automatic chat scraping or hidden model calls; budgets are enforced and output-file overwrites are refused. Added safety and two-session regression tests and documentation.
+
 - Hardened the remaining dashboard API routes and removed dead secret handling (follow-up to the API boundary work):
   - All API routes now validate request bodies with zod: `persist` must be a real boolean (the string `"false"` previously persisted anyway), `task`/`text` are length-bounded (an unbounded chat text triggered one provider call per 12k chunk, so a large body could fan out into thousands of unauthenticated model calls), and `projectId`/`scanJson`/`existingCapsule` are validated at the boundary.
   - Removed `geminiApiKey` and `ollamaUrl` from project settings: they were persisted in plaintext to `workspaces/projects.json`, echoed back to any dashboard client, and never used by any provider (providers read env vars only). The settings form now explains the env-var configuration instead. Existing `projects.json` files parse unchanged (unknown fields are ignored).
