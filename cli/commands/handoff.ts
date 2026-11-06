@@ -1,6 +1,13 @@
 import { writeFile } from "node:fs/promises";
 
-import { checkpointMemory, recallContext } from "../../lib/memory/engine";
+import {
+  appendMemoryItem,
+  buildItemTitle,
+  checkpointMemory,
+  KIND_TO_FILE_KEY,
+  loadMemoryFile,
+  recallContext,
+} from "../../lib/memory/engine";
 import { getActiveEvents, readJournalEvents, refuseSensitive } from "../../lib/memory/journal";
 import type { JournalEventKind } from "../../lib/memory/schemas";
 import { runRecallCommand } from "./recall";
@@ -106,7 +113,9 @@ export async function runHandoffCommand(
 
   // Re-running an identical handoff (common after a commit changes the
   // auto-generated git anchor, which the journal dedupe keys on) must not
-  // duplicate notes. Dedupe on kind + full note text against active records.
+  // duplicate notes. Dedupe on kind + full note text against active records;
+  // for notes the journal already holds, still re-sync the Markdown mirror
+  // in case it lost the item (manual edit, mirror cap aging).
   const recorded = new Set(
     getActiveEvents(await readJournalEvents(workspaceRoot))
       .map((event) => `${event.kind}:${event.text}`),
@@ -115,6 +124,19 @@ export async function runHandoffCommand(
   for (const note of notes) {
     if (recorded.has(`${note.kind}:${note.text}`)) {
       skipped++;
+      const fileKey = KIND_TO_FILE_KEY[note.kind];
+      const mirrorItems = (await loadMemoryFile(workspaceRoot, fileKey)).items;
+      if (!mirrorItems.some((item) => item.content.trim() === note.text)) {
+        await appendMemoryItem(workspaceRoot, fileKey, {
+          type: note.kind,
+          title: buildItemTitle(note.text),
+          content: note.text,
+          source: options.source || "cli:handoff",
+          confidence: 0.9,
+          related_files: [],
+          tags: ["session-handoff"],
+        });
+      }
       continue;
     }
     await checkpointMemory(workspaceRoot, {

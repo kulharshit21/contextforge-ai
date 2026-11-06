@@ -400,7 +400,7 @@ export async function saveMemoryFileRaw(
   return parsed;
 }
 
-function buildItemTitle(text: string) {
+export function buildItemTitle(text: string) {
   const firstSentence = text.split(/[\r\n.!?]/).find(Boolean)?.trim() ?? text;
   return firstSentence.slice(0, 72);
 }
