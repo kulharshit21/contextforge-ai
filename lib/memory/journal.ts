@@ -232,6 +232,44 @@ export type JournalEventInput = {
   breakLock?: boolean;
 };
 
+// Exclusive-create lock with stale detection, shared by journal appends,
+// Markdown mirror updates, and journal repair so that every read-modify-write
+// sequence is serialized across the CLI, dashboard, and Python skill.
+export async function acquireWriterLock(workspaceRoot: string, breakLock: boolean): Promise<void> {
+  // The lock lives inside the journal directory; create it first so first
+  // writers on a fresh workspace do not fail opening the lock file.
+  await ensureDir(getJournalDir(workspaceRoot));
+  const lockPath = getLockPath(workspaceRoot);
+  await verifyNotSymlink(lockPath, "Writer lock");
+
+  const lockPayload = JSON.stringify({
+    pid: process.pid,
+    created_at: new Date().toISOString(),
+    timestamp: Date.now() / 1000,
+  });
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const handle = await open(lockPath, "wx");
+      await handle.writeFile(lockPayload, "utf8");
+      await handle.close();
+      return;
+    } catch {
+      const lockStatus = await inspectLock(workspaceRoot);
+      if (breakLock || !lockStatus.isActive) {
+        await unlink(lockPath).catch(() => {});
+        continue;
+      }
+      throw new Error(`Memory writer lock exists (${lockStatus.message}). Check for an active writer before clearing it.`);
+    }
+  }
+  throw new Error("Failed to acquire memory writer lock after recovery attempt");
+}
+
+export async function releaseWriterLock(workspaceRoot: string): Promise<void> {
+  await unlink(getLockPath(workspaceRoot)).catch(() => {});
+}
+
 export async function appendJournalEvent(
   workspaceRoot: string,
   input: JournalEventInput,
@@ -273,34 +311,7 @@ export async function appendJournalEvent(
   const lockPath = getLockPath(workspaceRoot);
   await verifyNotSymlink(lockPath, "Writer lock");
 
-  // Acquire lock with stale detection
-  const lockPayload = JSON.stringify({
-    pid: process.pid,
-    created_at: new Date().toISOString(),
-    timestamp: Date.now() / 1000,
-  });
-
-  let lockAcquired = false;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const handle = await open(lockPath, "wx");
-      await handle.writeFile(lockPayload, "utf8");
-      await handle.close();
-      lockAcquired = true;
-      break;
-    } catch {
-      const lockStatus = await inspectLock(workspaceRoot);
-      if (input.breakLock || !lockStatus.isActive) {
-        await unlink(lockPath).catch(() => {});
-        continue;
-      }
-      throw new Error(`Memory writer lock exists (${lockStatus.message}). Check for an active writer before clearing it.`);
-    }
-  }
-
-  if (!lockAcquired) {
-    throw new Error("Failed to acquire memory writer lock after recovery attempt");
-  }
+  await acquireWriterLock(workspaceRoot, input.breakLock ?? false);
 
   try {
     const oldEvents = await readJournalEvents(workspaceRoot);
@@ -387,77 +398,96 @@ export async function repairJournal(
 }> {
   const journalDir = getJournalDir(workspaceRoot);
   await ensureDir(journalDir);
-  await clearLock(workspaceRoot, breakLock);
+  await verifyNotSymlink(journalDir, "Memory directory");
 
-  const eventsPath = getEventsPath(workspaceRoot);
-  if (!(await pathExists(eventsPath))) {
-    return { validRecords: 0, corruptLines: 0, backupPath: null };
-  }
+  // Hold the same writer lock appendJournalEvent uses across the entire
+  // read→rename→write sequence. Without it, an append committed between the
+  // backup rename (when events.jsonl is absent and a writer would see an
+  // empty journal) and the reconstruction write would be silently clobbered.
+  await acquireWriterLock(workspaceRoot, breakLock);
 
-  let content = await readFile(eventsPath, "utf8");
-  if (content.charCodeAt(0) === 0xfeff) {
-    content = content.slice(1);
-  }
+  try {
+    const eventsPath = getEventsPath(workspaceRoot);
+    if (!(await pathExists(eventsPath))) {
+      return { validRecords: 0, corruptLines: 0, backupPath: null };
+    }
 
-  const lines = content.split(/\r?\n/);
-  const validEvents: JournalEvent[] = [];
-  let corruptCount = 0;
-  let previous = "0".repeat(64);
-  let hasCorruption = false;
+    let content = await readFile(eventsPath, "utf8");
+    if (content.charCodeAt(0) === 0xfeff) {
+      content = content.slice(1);
+    }
 
-  for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i].trim();
-    if (!raw) continue;
+    const lines = content.split(/\r?\n/);
+    const validEvents: JournalEvent[] = [];
+    let corruptCount = 0;
+    let previous = "0".repeat(64);
+    let hasCorruption = false;
 
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i].trim();
+      if (!raw) continue;
+
+      if (hasCorruption) {
+        corruptCount++;
+        continue;
+      }
+
+      try {
+        const event = JSON.parse(raw);
+        if (event.v !== VERSION) {
+          hasCorruption = true;
+          corruptCount++;
+          continue;
+        }
+        const supplied = event.digest;
+        const payload: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(event)) {
+          if (k !== "digest") payload[k] = v;
+        }
+        if (event.previous !== previous || supplied !== computeDigest(payload)) {
+          hasCorruption = true;
+          corruptCount++;
+          continue;
+        }
+        const parsed = JournalEventSchema.safeParse(event);
+        if (!parsed.success) {
+          hasCorruption = true;
+          corruptCount++;
+          continue;
+        }
+        previous = supplied as string;
+        validEvents.push(parsed.data);
+      } catch {
+        hasCorruption = true;
+        corruptCount++;
+      }
+    }
+
+    let backupPath: string | null = null;
     if (hasCorruption) {
-      corruptCount++;
-      continue;
+      const tsStr = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+      backupPath = path.join(journalDir, `events.jsonl.bak.${tsStr}`);
+      await rename(eventsPath, backupPath);
+
+      const reconstructed = validEvents.map((e) => JSON.stringify(e)).join("\n") + (validEvents.length > 0 ? "\n" : "");
+      // Atomic swap via a temp file so the journal is never absent or
+      // half-written between the backup rename and the reconstruction.
+      const tempPath = `${eventsPath}.repair-${process.pid}-${Date.now()}.tmp`;
+      try {
+        await writeFile(tempPath, reconstructed, "utf8");
+        await rename(tempPath, eventsPath);
+      } catch (error) {
+        await unlink(tempPath).catch(() => {});
+        throw error;
+      }
     }
 
-    try {
-      const event = JSON.parse(raw);
-      if (event.v !== VERSION) {
-        hasCorruption = true;
-        corruptCount++;
-        continue;
-      }
-      const supplied = event.digest;
-      const payload: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(event)) {
-        if (k !== "digest") payload[k] = v;
-      }
-      if (event.previous !== previous || supplied !== computeDigest(payload)) {
-        hasCorruption = true;
-        corruptCount++;
-        continue;
-      }
-      const parsed = JournalEventSchema.safeParse(event);
-      if (!parsed.success) {
-        hasCorruption = true;
-        corruptCount++;
-        continue;
-      }
-      previous = supplied as string;
-      validEvents.push(parsed.data);
-    } catch {
-      hasCorruption = true;
-      corruptCount++;
-    }
+    return {
+      validRecords: validEvents.length,
+      corruptLines: corruptCount,
+      backupPath,
+    };
+  } finally {
+    await releaseWriterLock(workspaceRoot);
   }
-
-  let backupPath: string | null = null;
-  if (hasCorruption) {
-    const tsStr = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
-    backupPath = path.join(journalDir, `events.jsonl.bak.${tsStr}`);
-    await rename(eventsPath, backupPath);
-
-    const reconstructed = validEvents.map((e) => JSON.stringify(e)).join("\n") + (validEvents.length > 0 ? "\n" : "");
-    await writeFile(eventsPath, reconstructed, "utf8");
-  }
-
-  return {
-    validRecords: validEvents.length,
-    corruptLines: corruptCount,
-    backupPath,
-  };
 }

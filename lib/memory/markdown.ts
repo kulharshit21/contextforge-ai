@@ -56,6 +56,20 @@ export function renderMemoryFile(file: MemoryFile) {
   });
 }
 
+// gray-matter parses unquoted YAML timestamps (e.g. a hand-edited
+// `updated_at: 2026-11-06`) into Date objects, which fail the z.string()
+// schema and crash every memory command. Normalize them back to ISO strings
+// so a natural hand-edit cannot brick the workspace.
+function normalizeTimestamp(value: unknown): string {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (typeof value === "string" && value.trim()) {
+    return value;
+  }
+  return new Date().toISOString();
+}
+
 export function parseMemoryFile(raw: string) {
   const parsed = matter(raw);
 
@@ -65,10 +79,13 @@ export function parseMemoryFile(raw: string) {
       typeof parsed.data.summary === "string"
         ? parsed.data.summary
         : parsed.content.split("## Durable Entries")[0]?.trim() ?? "",
-    items: Array.isArray(parsed.data.items) ? parsed.data.items : [],
-    updated_at:
-      typeof parsed.data.updated_at === "string"
-        ? parsed.data.updated_at
-        : new Date().toISOString(),
+    items: (Array.isArray(parsed.data.items) ? parsed.data.items : []).map(
+      (item) => ({
+        ...item,
+        created_at: normalizeTimestamp(item.created_at),
+        updated_at: normalizeTimestamp(item.updated_at),
+      }),
+    ),
+    updated_at: normalizeTimestamp(parsed.data.updated_at),
   });
 }
