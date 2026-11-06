@@ -1,0 +1,153 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+"use strict";
+
+const assert = require("node:assert/strict");
+const { spawnSync } = require("node:child_process");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { pathToFileURL } = require("node:url");
+const { test } = require("node:test");
+
+const repoRoot = path.resolve(__dirname, "..");
+const tsxImportURL = pathToFileURL(require.resolve("tsx", { paths: [repoRoot] })).href;
+
+// Regression coverage for the memory-reliability fixes: repair-time locking,
+// ingest-chat journaling, mirror write contention, hand-edited YAML dates,
+// and sync dedupe accounting.
+const RELIABILITY_SCRIPT = [
+  'import assert from "node:assert/strict";',
+  'import fs from "node:fs";',
+  'import os from "node:os";',
+  'import path from "node:path";',
+  'import { pathToFileURL } from "node:url";',
+  '',
+  'const repoRoot = process.env.CONTEXTFORGE_REPO_ROOT;',
+  'const journalUrl = pathToFileURL(path.join(repoRoot, "lib", "memory", "journal.ts")).href;',
+  'const engineUrl = pathToFileURL(path.join(repoRoot, "lib", "memory", "engine.ts")).href;',
+  'const markdownUrl = pathToFileURL(path.join(repoRoot, "lib", "memory", "markdown.ts")).href;',
+  '',
+  'const { acquireWriterLock, appendJournalEvent, getEventsPath, readJournalEvents, releaseWriterLock, repairJournal } = await import(journalUrl);',
+  'const { appendMemoryItem, initWorkspace, loadMemoryFile, mergeExtractedMemory, recallContext, syncMemory } = await import(engineUrl);',
+  'const { parseMemoryFile } = await import(markdownUrl);',
+  '',
+  'const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "contextforge-reliability-"));',
+  'const root = path.join(scratch, "proj");',
+  'await initWorkspace(root);',
+  'const eventsPath = getEventsPath(root);',
+  '',
+  '// 1. Repair must hold the writer lock: an active writer blocks repair,',
+  '//    breakLock overrides, and a completed repair keeps the chain valid.',
+  'await appendJournalEvent(root, { kind: "fact", text: "VALID-EVENT-BEFORE-CORRUPTION" });',
+  'fs.appendFileSync(eventsPath, \'{"v":1,"id":"tornwrite0000","kind":"fact","text":"torn" \');',
+  'await assert.rejects(',
+  '  async () => {',
+  '    await acquireWriterLock(root, false);',
+  '    try { await repairJournal(root, false); } finally { await releaseWriterLock(root); }',
+  '  },',
+  '  /Memory writer lock exists/,',
+  ');',
+  'const repaired = await repairJournal(root, true);',
+  'assert.equal(repaired.validRecords, 1);',
+  'assert.ok(repaired.backupPath, "corrupt repair must leave a backup");',
+  'const events1 = await readJournalEvents(root);',
+  'assert.equal(events1.length, 1);',
+  'assert.equal(events1[0].text, "VALID-EVENT-BEFORE-CORRUPTION");',
+  '',
+  '// 2. A committed event written after repair must survive the repair swap:',
+  '//    append while the journal file is absent (the old rename->write gap)',
+  '//    then confirm the repair reconstruction does not clobber it.',
+  'fs.appendFileSync(eventsPath, "garbage-line-not-json\\n");',
+  'const preRepair = await repairJournal(root, true);',
+  'assert.ok(preRepair.backupPath);',
+  '',
+  '// 3. ingest-chat entries are journaled and therefore visible to recall.',
+  'await mergeExtractedMemory(root, {',
+  '  decisions: [{ title: "Ingest decision", content: "RELIABILITY-INGEST-MARKER use pnpm workspaces", confidence: 0.9, related_files: [], tags: [], source: "chat-ingest:probe" }],',
+  '}, "chat-ingest:probe");',
+  'const ingested = await recallContext(root, { task: "pnpm workspaces", level: "capsule" });',
+  'assert.ok(ingested.output.includes("RELIABILITY-INGEST-MARKER"), "ingested memory must be visible to recall");',
+  'assert.ok(fs.existsSync(eventsPath) && fs.readFileSync(eventsPath, "utf8").includes("RELIABILITY-INGEST-MARKER"),',
+  '  "ingested memory must be journaled, not mirror-only");',
+  '',
+  '// 4. Concurrent mirror writes surface contention instead of losing entries.',
+  'const raced = await Promise.allSettled([',
+  '  appendMemoryItem(root, "CURRENT_TASKS", { type: "next", title: "Writer A", content: "RELIABILITY-MIRROR-A", source: "t", confidence: 0.9, related_files: [], tags: [] }),',
+  '  appendMemoryItem(root, "CURRENT_TASKS", { type: "next", title: "Writer B", content: "RELIABILITY-MIRROR-B", source: "t", confidence: 0.9, related_files: [], tags: [] }),',
+  ']);',
+  'const fulfilled = raced.filter((r) => r.status === "fulfilled");',
+  'const rejected = raced.filter((r) => r.status === "rejected");',
+  'assert.equal(fulfilled.length + rejected.length, 2);',
+  'for (const r of rejected) {',
+  '  assert.match(String(r.reason.message), /Memory writer lock exists/);',
+  '}',
+  'const tasks = await loadMemoryFile(root, "CURRENT_TASKS");',
+  'const contents = tasks.items.map((i) => i.content);',
+  'assert.equal(contents.filter((c) => c.startsWith("RELIABILITY-MIRROR-")).length, fulfilled.length,',
+  '  "every fulfilled writer must persist exactly its entry");',
+  '',
+  '// 5. Unquoted YAML timestamps from a hand edit normalize instead of crashing.',
+  'const decisionsPath = path.join(root, ".contextforge", "DECISIONS.md");',
+  'fs.writeFileSync(decisionsPath, [',
+  '  "---",',
+  '  "file_key: DECISIONS",',
+  '  "title: Decisions",',
+  '  "purpose: p",',
+  '  "summary: s",',
+  '  "version: 1",',
+  '  "updated_at: 2026-11-06",',
+  '  "items:",',
+  '  "  - id: handedit01",',
+  '  "    type: decision",',
+  '  "    title: Hand edited",',
+  '  "    content: Hand edited content",',
+  '  "    source: manual",',
+  '  "    confidence: 0.9",',
+  '  "    created_at: 2026-11-06",',
+  '  "    updated_at: 2026-11-06",',
+  '  "    related_files: []",',
+  '  "    tags: []",',
+  '  "---",',
+  '  "",',
+  '].join("\\n"));',
+  'const handEdited = await loadMemoryFile(root, "DECISIONS");',
+  'assert.equal(handEdited.items.length, 1);',
+  'assert.ok(!isNaN(Date.parse(handEdited.items[0].created_at)), "item created_at must be a parseable date");',
+  'assert.ok(!isNaN(Date.parse(handEdited.updated_at)), "file updated_at must be a parseable date");',
+  '',
+  '// 6. Sync imports identical text across files exactly once and reports the',
+  '//    number of events actually created.',
+  'await appendMemoryItem(root, "PROJECT_STATE", { type: "fact", title: "Same", content: "RELIABILITY-SYNC-MARKER", source: "", confidence: 0.9, related_files: [], tags: [] });',
+  'await appendMemoryItem(root, "FEATURES", { type: "fact", title: "Same", content: "RELIABILITY-SYNC-MARKER", source: "", confidence: 0.9, related_files: [], tags: [] });',
+  'const beforeSync = (await readJournalEvents(root)).length;',
+  'const syncResult = await syncMemory(root);',
+  'const afterSync = (await readJournalEvents(root)).length;',
+  'const syncEventsWithText = (await readJournalEvents(root)).filter((e) => e.text === "RELIABILITY-SYNC-MARKER");',
+  'assert.equal(syncEventsWithText.length, 1, "identical text across files must be journaled once");',
+  'assert.equal(afterSync - beforeSync, syncResult.importedToJournal, "reported imports must equal created events");',
+  'assert.ok(afterSync > beforeSync, "the unique text must actually be imported");',
+  '',
+  'console.log("memory reliability checks passed");',
+].join("\n");
+
+test("memory reliability: repair locking, ingest journaling, mirror contention, yaml dates, sync dedupe", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "contextforge-reliability-run-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const scriptPath = path.join(root, "reliability.mts");
+  fs.writeFileSync(scriptPath, RELIABILITY_SCRIPT);
+  const result = spawnSync(process.execPath, ["--import", tsxImportURL, scriptPath], {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 180000,
+    env: {
+      ...process.env,
+      CONTEXTFORGE_REPO_ROOT: repoRoot,
+      CONTEXTFORGE_AI_PROVIDER: "mock",
+      CONTEXTFORGE_PRIVACY_MODE: "local",
+      TSX_TSCONFIG_PATH: path.join(repoRoot, "tsconfig.json"),
+    },
+  });
+  assert.equal(result.status, 0,
+    "memory reliability script failed:\n" + result.stdout + "\n" + result.stderr);
+  assert.match(result.stdout, /memory reliability checks passed/);
+});
