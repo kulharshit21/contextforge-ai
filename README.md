@@ -69,6 +69,25 @@ The portable skill is in [`.agents/skills/contextforge-memory/`](.agents/skills/
 
 The companion script uses **Python 3.10+ and the standard library**. It can checkpoint and recover journal records without the Node.js CLI. **It does not automatically synchronize Python-written entries into the human-readable Markdown files**; see the [architecture notes](docs/ARCHITECTURE.md).
 
+## Hand off a coding session to tomorrow's agent
+
+The Node CLI now offers an **explicit, source-aware session handoff**. It records only the verified progress and next actions you provide, then produces a compact brief from the active journal:
+
+~~~bash
+contextforge handoff "Finish login flow" --done "Auth middleware implemented" --failed "In-memory sessions disappeared after restart" --next "Add cookie expiry test" --source docs/auth.md
+~~~
+
+In a **fresh AI coding session**, from the same project folder:
+
+~~~bash
+contextforge audit
+contextforge resume "Finish login flow" --budget-chars 1800
+~~~
+
+`handoff` writes typed checkpoint records; `resume` restores relevant records **without adding more memory**. Output is strictly budgeted, and `--out` refuses to overwrite existing files. Both commands are available in the source CLI after this change is merged; the portable Python Skill continues to use its separate `save`/`recall` workflow.
+
+This is not automatic chat capture or a replacement for model compaction. The agent must be explicitly asked to invoke it, and stored claims must be checked against current code and tests. See [session handoff guide](docs/SESSION_HANDOFF.md).
+
 ## How it works
 
 ~~~text
