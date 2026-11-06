@@ -436,3 +436,51 @@ test("scan direct reads refuse symlinks and .git indirection keeps git facts loc
     "scan direct-read script failed:\n" + result.stdout + "\n" + result.stderr);
   assert.match(result.stdout, /scan direct-read checks passed/);
 });
+
+// Verifies the dashboard hardening additions: settings rename validation and
+// per-file capsule listing tolerance (one corrupt capsule must not break the
+// whole project snapshot).
+const HARDENING_SCRIPT = [
+  'import assert from "node:assert/strict";',
+  'import fs from "node:fs";',
+  'import path from "node:path";',
+  'import { pathToFileURL } from "node:url";',
+  '',
+  'const repoRoot = process.env.CONTEXTFORGE_REPO_ROOT;',
+  'const { updateProjectSettings } = await import(pathToFileURL(path.join(repoRoot, "lib", "server", "projects.ts")).href);',
+  'const { initWorkspace, listSavedCapsules, saveCapsule } = await import(pathToFileURL(path.join(repoRoot, "lib", "memory", "engine.ts")).href);',
+  '',
+  '// 1. Settings rename cannot blank or bloat the stored name.',
+  'await assert.rejects(',
+  '  () => updateProjectSettings("starter-local", { name: "" }),',
+  '  /project name between 1 and 100 characters/,',
+  ');',
+  'await assert.rejects(',
+  '  () => updateProjectSettings("starter-local", { name: "x".repeat(101) }),',
+  '  /project name between 1 and 100 characters/,',
+  ');',
+  'const renamed = await updateProjectSettings("starter-local", { name: "Reliable Workspace" });',
+  'assert.equal(renamed.name, "Reliable Workspace");',
+  '',
+  '// 2. One corrupt capsule file no longer breaks the whole listing.',
+  'const capsuleRoot = path.join(process.cwd(), "capsule-tolerance-ws");',
+  'await initWorkspace(capsuleRoot);',
+  'await saveCapsule(capsuleRoot, "Good capsule task", {',
+  '  goal: "g", summary: "s", relevant_context: [], files_likely_needed: [], files_to_avoid: [],',
+  '  previous_errors_to_remember: [], commands_to_run: [], agent_prompt: "p",',
+  '  estimated_raw_tokens: 1, estimated_capsule_tokens: 1, saved_percent: 0,',
+  '});',
+  'const brokenFrontmatter = "---" + String.fromCharCode(10) + "task: [unclosed" + String.fromCharCode(10) + "---" + String.fromCharCode(10) + "broken" + String.fromCharCode(10);',
+  'fs.writeFileSync(path.join(capsuleRoot, ".contextforge", "CAPSULES", "broken.md"), brokenFrontmatter);',
+  'const capsules = await listSavedCapsules(capsuleRoot);',
+  'assert.equal(capsules.length, 1, "corrupt capsule must be skipped, valid one kept");',
+  '',
+  'console.log("dashboard hardening checks passed");',
+].join("\n");
+
+test("dashboard hardening: settings validation and capsule list tolerance", (t) => {
+  const { result } = runTsxScript(t, "dashboard-hardening.mts", HARDENING_SCRIPT);
+  assert.equal(result.status, 0,
+    "dashboard hardening script failed:\n" + result.stdout + "\n" + result.stderr);
+  assert.match(result.stdout, /dashboard hardening checks passed/);
+});

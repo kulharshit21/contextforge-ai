@@ -801,23 +801,32 @@ export async function listSavedCapsules(workspaceRoot: string) {
   const entries = await readdir(capsuleDir, { withFileTypes: true });
   const files = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".md"));
 
-  const capsules = await Promise.all(
-    files.map(async (entry) => {
-      const filePath = path.join(capsuleDir, entry.name);
-      const raw = await readFile(filePath, "utf8");
-      const parsed = matter(raw);
-      return {
-        id: entry.name,
-        fileName: entry.name,
-        task: String(parsed.data.task ?? entry.name),
-        createdAt: String(parsed.data.created_at ?? ""),
-        markdown: raw,
-        estimatedRawTokens: Number(parsed.data.estimated_raw_tokens ?? 0),
-        estimatedCapsuleTokens: Number(parsed.data.estimated_capsule_tokens ?? 0),
-        savedPercent: Number(parsed.data.saved_percent ?? 0),
-      };
-    }),
-  );
+  const capsules = (
+    await Promise.all(
+      files.map(async (entry) => {
+        const filePath = path.join(capsuleDir, entry.name);
+        try {
+          const raw = await readFile(filePath, "utf8");
+          const parsed = matter(raw);
+          return {
+            id: entry.name,
+            fileName: entry.name,
+            task: String(parsed.data.task ?? entry.name),
+            createdAt: String(parsed.data.created_at ?? ""),
+            markdown: raw,
+            estimatedRawTokens: Number(parsed.data.estimated_raw_tokens ?? 0),
+            estimatedCapsuleTokens: Number(parsed.data.estimated_capsule_tokens ?? 0),
+            savedPercent: Number(parsed.data.saved_percent ?? 0),
+          };
+        } catch (error) {
+          // One malformed capsule (hand-edited frontmatter, torn write) must
+          // not fail the whole project snapshot; skip it and keep the rest.
+          console.warn(`Skipping unreadable capsule file: ${entry.name}`, error);
+          return null;
+        }
+      }),
+    )
+  ).filter((capsule): capsule is NonNullable<typeof capsule> => capsule !== null);
 
   return capsules.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }

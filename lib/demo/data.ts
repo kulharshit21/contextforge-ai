@@ -70,8 +70,6 @@ export const demoProjectRecord: ProjectRecord = {
   settings: {
     aiProvider: "mock",
     privacyMode: "local",
-    geminiApiKey: "",
-    ollamaUrl: "http://localhost:11434",
     maxTokenBudget: 6000,
     memoryUpdateBehavior: "preview_first",
   },

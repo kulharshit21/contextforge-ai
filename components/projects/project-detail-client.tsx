@@ -140,8 +140,6 @@ export function ProjectDetailClient({
       description: project.description,
       aiProvider: project.settings.aiProvider,
       privacyMode: project.settings.privacyMode,
-      geminiApiKey: project.settings.geminiApiKey,
-      ollamaUrl: project.settings.ollamaUrl,
       maxTokenBudget: project.settings.maxTokenBudget,
       memoryUpdateBehavior: project.settings.memoryUpdateBehavior,
     },
@@ -697,8 +695,8 @@ export function ProjectDetailClient({
 
             {currentDriftIssues.length ? (
               <div className="grid gap-4">
-                {currentDriftIssues.map((issue) => (
-                  <DriftIssueCard key={`${issue.title}-${issue.severity}`} issue={issue} />
+                {currentDriftIssues.map((issue, index) => (
+                  <DriftIssueCard key={`${issue.title}-${issue.severity}-${index}`} issue={issue} />
                 ))}
               </div>
             ) : (
@@ -793,15 +791,11 @@ export function ProjectDetailClient({
                   </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="settings-gemini">Gemini API key</Label>
-                    <Input id="settings-gemini" {...settingsForm.register("geminiApiKey")} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="settings-ollama">Ollama URL</Label>
-                    <Input id="settings-ollama" {...settingsForm.register("ollamaUrl")} />
-                  </div>
+                <div className="rounded-xl border border-white/10 bg-slate-950/50 p-3 text-xs leading-5 text-slate-400">
+                  Provider connections are configured through environment
+                  variables: <code className="text-slate-300">GEMINI_API_KEY</code> for
+                  cloud Gemini and <code className="text-slate-300">OLLAMA_BASE_URL</code>{" "}
+                  for local Ollama. Keys are never stored in workspace files.
                 </div>
 
                 <div className="space-y-2">
@@ -872,7 +866,7 @@ function InfoColumn({
   items,
 }: {
   title: string;
-  items: Array<{ title: string; content: string }>;
+  items: Array<{ id?: string; title: string; content: string }>;
 }) {
   return (
     <Card>
@@ -881,8 +875,8 @@ function InfoColumn({
       </CardHeader>
       <CardContent className="space-y-3">
         {items.length ? (
-          items.map((item) => (
-            <div key={item.title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          items.map((item, index) => (
+            <div key={item.id ?? `${item.title}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <p className="font-medium text-white">{item.title}</p>
               <p className="mt-2 text-sm leading-6 text-slate-300">{item.content}</p>
             </div>
