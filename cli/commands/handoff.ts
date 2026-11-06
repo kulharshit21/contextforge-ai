@@ -1,4 +1,4 @@
-import { lstat, writeFile } from "node:fs/promises";
+import { lstat, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { checkpointMemory, recallContext } from "../../lib/memory/engine";
@@ -53,7 +53,7 @@ function getNotes(task: string, options: HandoffCommandOptions): Note[] {
   const notes: Note[] = [];
   for (const field of fields) {
     if (field.value === undefined) continue;
-    if (!field.value.trim()) throw new Error(`--${field.label.toLowerCase().split(" ")[0]} cannot be blank`);
+    if (!field.value.trim()) throw new Error(`A handoff field cannot be blank: ${field.label}`);
     const text = `${field.label} for ${task}: ${field.value.trim()}`;
     refuseSensitive(text);
     notes.push({ kind: field.kind, text });
@@ -69,14 +69,26 @@ function getNotes(task: string, options: HandoffCommandOptions): Note[] {
 async function validateOutputPath(out: string | undefined, workspaceRoot: string): Promise<string | undefined> {
   if (!out) return undefined;
   const target = path.resolve(workspaceRoot, out);
-  let cursor = path.dirname(target);
-  while (true) {
-    const info = await lstat(cursor);
-    if (info.isSymbolicLink()) throw new Error(`Refusing to write handoff through a symlink: ${cursor}`);
-    if (!info.isDirectory()) throw new Error(`Output parent is not a directory: ${cursor}`);
-    const parent = path.dirname(cursor);
-    if (cursor === parent) break;
-    cursor = parent;
+  const parent = path.dirname(target);
+  const parentInfo = await lstat(parent);
+  if (!parentInfo.isDirectory()) {
+    throw new Error(`Output parent is not a directory: ${parent}`);
+  }
+  // Compare canonical paths instead of rejecting system-level symlinks such
+  // as macOS /var -> /private/var. Internal project symlink escapes are still refused.
+  const lexicalRelative = path.relative(path.resolve(workspaceRoot), target);
+  const intendedInside = lexicalRelative !== ".."
+    && !lexicalRelative.startsWith(".." + path.sep)
+    && !path.isAbsolute(lexicalRelative);
+  if (intendedInside) {
+    const [realRoot, realParent] = await Promise.all([
+      realpath(workspaceRoot),
+      realpath(parent),
+    ]);
+    const relative = path.relative(realRoot, realParent);
+    if (relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
+      throw new Error(`Refusing output path outside project through symlink: ${out}`);
+    }
   }
   try {
     await lstat(target);
@@ -99,6 +111,13 @@ export async function runHandoffCommand(
   const task = getTask(taskArg);
   const budgetChars = parseBudget(options.budgetChars);
   const notes = getNotes(task, options);
+  if (options.source) {
+    const source = options.source.trim();
+    if (source.length > 300 || /[\r\n\x00-\x08\x0b\x0c\x0e-\x1f]/.test(source)) {
+      throw new Error("Handoff source must be at most 300 characters, without control characters");
+    }
+    refuseSensitive(source);
+  }
   const destination = await validateOutputPath(options.out, workspaceRoot);
 
   // Check the output header before writing any journal entries. An oversized
