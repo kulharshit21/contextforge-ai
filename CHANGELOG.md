@@ -4,6 +4,15 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Closed CLI robustness gaps found by follow-up audits (all reproduced before fixing):
+  - `recall --out` and `resume --out` now apply the same output-path validation as `handoff --out` (a planted junction previously let output escape the project).
+  - Re-running an identical `handoff` no longer duplicates journal notes when the auto git anchor changed between runs.
+  - `contextforge audit` survives unreadable Markdown memory files, reports them, and still delivers the journal integrity verdict.
+  - Re-ingesting the same chat no longer duplicates Markdown mirror entries.
+  - One invalid record in `workspaces/projects.json` no longer hides every project; ghost capsule files are skipped; a corrupt `repo-scan.json` degrades to a default scan instead of replacing the project with demo data.
+  - Chat extraction falls back to deterministic heuristics when the configured provider is unreachable (matching capsule and drift behavior).
+  - Dashboard: Save Settings double-submit guard; API validation messages now surface to the user instead of fixed strings.
+
 - Added explicit session handoff commands (`contextforge handoff` and `contextforge resume`) for saving verified successes, failed attempts, test results, blockers and next actions, then recovering a task-specific brief from a later session. No automatic chat scraping or hidden model calls; budgets are enforced and output-file overwrites are refused. Added safety and two-session regression tests and documentation.
 
 - Hardened the remaining dashboard API routes and removed dead secret handling (follow-up to the API boundary work):
