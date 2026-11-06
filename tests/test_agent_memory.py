@@ -21,7 +21,8 @@ class AgentMemoryTests(unittest.TestCase):
     def invoke(self, *arguments, status=0):
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--root", str(self.root), *arguments],
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            check=False,
         )
         self.assertEqual(result.returncode, status, result.stdout + result.stderr)
         return result
