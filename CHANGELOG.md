@@ -4,6 +4,14 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Hardened the remaining dashboard API routes and removed dead secret handling (follow-up to the API boundary work):
+  - All API routes now validate request bodies with zod: `persist` must be a real boolean (the string `"false"` previously persisted anyway), `task`/`text` are length-bounded (an unbounded chat text triggered one provider call per 12k chunk, so a large body could fan out into thousands of unauthenticated model calls), and `projectId`/`scanJson`/`existingCapsule` are validated at the boundary.
+  - Removed `geminiApiKey` and `ollamaUrl` from project settings: they were persisted in plaintext to `workspaces/projects.json`, echoed back to any dashboard client, and never used by any provider (providers read env vars only). The settings form now explains the env-var configuration instead. Existing `projects.json` files parse unchanged (unknown fields are ignored).
+  - The per-project `privacyMode` setting is now actually enforced: it is threaded through provider resolution, so a project set to local blocks Gemini even when `CONTEXTFORGE_PRIVACY_MODE=cloud` is set globally. Previously the toggle was inert and misleading.
+  - `updateProjectSettings` validates renames (1–100 char name, ≤2000 char description) and honors the `editable` flag.
+  - One corrupt capsule file no longer replaces the entire project snapshot with demo data; unreadable capsules are skipped with a warning.
+  - Fixed duplicate React keys on user/LLM-derived content in the project detail page.
+
 - Hardened dashboard API filesystem boundaries (local, unauthenticated endpoints):
   - `PUT /api/memory` now validates `fileKey` at runtime with zod. Previously a request with a traversal value such as `../../../../name` (accepted despite the TypeScript union type) could write attacker-controlled `.md` files outside the project workspace, including overwriting unrelated repositories' agent instruction files.
   - `saveMemoryFile`/`saveMemoryFileRaw` reject unknown memory file keys before path construction, closing the same hole for any non-HTTP caller.

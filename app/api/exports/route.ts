@@ -1,14 +1,27 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 import { generateProjectExports } from "@/lib/server/projects";
 
+const ExportsPayloadSchema = z.object({
+  projectId: z.string().min(1),
+});
+
 export async function POST(request: Request) {
   try {
-    const payload = (await request.json()) as {
-      projectId: string;
-    };
+    const parsed = ExportsPayloadSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: `Invalid request: ${parsed.error.issues
+            .map((issue) => issue.message)
+            .join("; ")}`,
+        },
+        { status: 400 },
+      );
+    }
 
-    const exportsBundle = await generateProjectExports(payload.projectId);
+    const exportsBundle = await generateProjectExports(parsed.data.projectId);
     return NextResponse.json({ exports: exportsBundle });
   } catch (error) {
     return NextResponse.json(

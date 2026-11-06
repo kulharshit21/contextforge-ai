@@ -14,7 +14,6 @@ import { buildChatExtractionPrompt } from "../prompts/extract";
 import {
   getPreferredProvider,
   getPrivacyMode,
-  isCloudProvider,
   type PrivacyMode,
   type ProviderName,
 } from "../utils/env";
@@ -166,16 +165,18 @@ export type ProviderResolution = {
   warning?: string;
 };
 
-export function resolveProvider(requested?: ProviderName): ProviderResolution {
+export function resolveProvider(requested?: ProviderName, privacyMode?: PrivacyMode): ProviderResolution {
   const preferred = requested ?? getPreferredProvider();
-  const privacyMode = getPrivacyMode();
+  // An explicit per-project privacy mode wins over the env default; this makes
+  // the dashboard's per-project toggle actually enforce the cloud/local gate.
+  const effectivePrivacyMode = privacyMode ?? getPrivacyMode();
 
-  if (privacyMode === "local" && preferred === "gemini") {
+  if (effectivePrivacyMode === "local" && preferred === "gemini") {
     try {
       return {
         provider: new OllamaProvider(),
         effectiveProvider: "ollama",
-        privacyMode,
+        privacyMode: effectivePrivacyMode,
         warning:
           "Privacy mode is LOCAL, so cloud Gemini calls are blocked. Falling back to Ollama.",
       };
@@ -183,7 +184,7 @@ export function resolveProvider(requested?: ProviderName): ProviderResolution {
       return {
         provider: new MockProvider(),
         effectiveProvider: "mock",
-        privacyMode,
+        privacyMode: effectivePrivacyMode,
         warning:
           "Privacy mode is LOCAL and Ollama is unavailable. Falling back to the mock provider.",
       };
@@ -195,7 +196,7 @@ export function resolveProvider(requested?: ProviderName): ProviderResolution {
       return {
         provider: new GeminiProvider(),
         effectiveProvider: "gemini",
-        privacyMode,
+        privacyMode: effectivePrivacyMode,
       };
     }
 
@@ -203,14 +204,14 @@ export function resolveProvider(requested?: ProviderName): ProviderResolution {
       return {
         provider: new OllamaProvider(),
         effectiveProvider: "ollama",
-        privacyMode,
+        privacyMode: effectivePrivacyMode,
       };
     }
   } catch {
     return {
       provider: new MockProvider(),
       effectiveProvider: "mock",
-      privacyMode,
+      privacyMode: effectivePrivacyMode,
       warning: `Configured provider ${preferred} was unavailable, so ContextForge switched to mock mode.`,
     };
   }
@@ -218,7 +219,7 @@ export function resolveProvider(requested?: ProviderName): ProviderResolution {
   return {
     provider: new MockProvider(),
     effectiveProvider: "mock",
-    privacyMode,
+    privacyMode: effectivePrivacyMode,
   };
 }
 
@@ -226,8 +227,9 @@ export async function extractMemoryFromChat(
   chatText: string,
   mode = "Full extraction",
   requestedProvider?: ProviderName,
+  privacyMode?: PrivacyMode,
 ) {
-  const resolution = resolveProvider(requestedProvider);
+  const resolution = resolveProvider(requestedProvider, privacyMode);
 
   if (resolution.effectiveProvider === "mock") {
     return {
@@ -265,8 +267,9 @@ export async function generateCapsuleFromMemory(
   memoryFiles: MemoryFile[],
   repoScan: RepoScan,
   requestedProvider?: ProviderName,
+  privacyMode?: PrivacyMode,
 ) {
-  const resolution = resolveProvider(requestedProvider);
+  const resolution = resolveProvider(requestedProvider, privacyMode);
   const fallback = createDeterministicCapsule(task, memoryFiles, repoScan);
 
   if (resolution.effectiveProvider === "mock") {
@@ -317,9 +320,10 @@ export async function analyzeMemoryDrift(
   memoryFiles: MemoryFile[],
   repoScan: RepoScan,
   requestedProvider?: ProviderName,
+  privacyMode?: PrivacyMode,
 ) {
   const deterministic = detectMemoryDrift(workspaceRoot, memoryFiles, repoScan);
-  const resolution = resolveProvider(requestedProvider);
+  const resolution = resolveProvider(requestedProvider, privacyMode);
 
   if (resolution.effectiveProvider === "mock") {
     return {
@@ -362,8 +366,4 @@ export async function analyzeMemoryDrift(
       },
     };
   }
-}
-
-export function isCloudCallAllowed(providerName: ProviderName) {
-  return !isCloudProvider(providerName) || getPrivacyMode() === "cloud";
 }

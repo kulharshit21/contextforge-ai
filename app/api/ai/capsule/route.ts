@@ -1,20 +1,33 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 import { generateProjectCapsule } from "@/lib/server/projects";
-import type { Capsule } from "@/lib/memory/schemas";
+import { CapsuleSchema } from "@/lib/memory/schemas";
+
+const CapsulePayloadSchema = z.object({
+  projectId: z.string().min(1),
+  task: z.string().min(1).max(2000),
+  persist: z.boolean().optional(),
+  existingCapsule: CapsuleSchema.optional(),
+});
 
 export async function POST(request: Request) {
   try {
-    const payload = (await request.json()) as {
-      projectId: string;
-      task: string;
-      persist?: boolean;
-      existingCapsule?: Capsule;
-    };
+    const parsed = CapsulePayloadSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: `Invalid request: ${parsed.error.issues
+            .map((issue) => issue.message)
+            .join("; ")}`,
+        },
+        { status: 400 },
+      );
+    }
 
-    const result = await generateProjectCapsule(payload.projectId, payload.task, {
-      persist: payload.persist,
-      existingCapsule: payload.existingCapsule,
+    const result = await generateProjectCapsule(parsed.data.projectId, parsed.data.task, {
+      persist: parsed.data.persist,
+      existingCapsule: parsed.data.existingCapsule,
     });
 
     return NextResponse.json(result);

@@ -161,8 +161,6 @@ export const DriftIssueSchema = z.object({
 export const ProjectSettingsSchema = z.object({
   aiProvider: ProviderNameSchema.default("mock"),
   privacyMode: PrivacyModeSchema.default("local"),
-  geminiApiKey: z.string().default(""),
-  ollamaUrl: z.string().default("http://localhost:11434"),
   maxTokenBudget: z.number().int().positive().default(6000),
   memoryUpdateBehavior: z
     .enum(["preview_first", "append_with_source", "manual_only"])

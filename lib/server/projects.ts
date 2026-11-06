@@ -76,8 +76,6 @@ const STARTER_PROJECT_RECORD: ProjectRecord = {
   settings: {
     aiProvider: "mock",
     privacyMode: "local",
-    geminiApiKey: "",
-    ollamaUrl: "http://localhost:11434",
     maxTokenBudget: 6000,
     memoryUpdateBehavior: "preview_first",
   },
@@ -279,7 +277,7 @@ export async function listProjects() {
           const memoryFiles = await loadMemoryFiles(project.workspaceRoot);
           const repoScan = await readRepoScan(project.workspaceRoot);
           const driftIssues = calculateMemoryHealthScore(
-            (await analyzeMemoryDrift(project.workspaceRoot, memoryFiles, repoScan, project.settings.aiProvider))
+            (await analyzeMemoryDrift(project.workspaceRoot, memoryFiles, repoScan, project.settings.aiProvider, project.settings.privacyMode))
               .issues,
           );
           const capsules = await listSavedCapsules(project.workspaceRoot);
@@ -330,6 +328,7 @@ export async function getProjectSnapshot(projectId: string) {
       memoryFiles,
       repoScan,
       project.settings.aiProvider,
+      project.settings.privacyMode,
     );
     const capsules = await listSavedCapsules(project.workspaceRoot);
     const exportsList = await listSavedExports(project.workspaceRoot);
@@ -385,8 +384,6 @@ export async function createProject(input: {
     settings: {
       aiProvider: "mock",
       privacyMode: "local",
-      geminiApiKey: "",
-      ollamaUrl: "http://localhost:11434",
       maxTokenBudget: 6000,
       memoryUpdateBehavior: "preview_first",
     },
@@ -408,9 +405,26 @@ export async function updateProjectSettings(
     throw new Error("Demo projects are read-only.");
   }
 
+  // Same validation createProject applies; renames must not be able to blank
+  // or bloat the stored name/description.
+  if (settings.name !== undefined) {
+    if (typeof settings.name !== "string" || !settings.name.trim() || settings.name.length > 100) {
+      throw new Error("A project name between 1 and 100 characters is required.");
+    }
+  }
+  if (settings.description !== undefined) {
+    if (typeof settings.description !== "string" || settings.description.length > 2000) {
+      throw new Error("A project description of at most 2000 characters is required.");
+    }
+  }
+
   const projects = await getStoredProjects();
-  if (!projects.some((project) => project.id === projectId)) {
+  const target = projects.find((project) => project.id === projectId);
+  if (!target) {
     throw new Error("Project not found.");
+  }
+  if (!target.editable) {
+    throw new Error("Demo projects are read-only.");
   }
   const nextProjects = projects.map((project) => {
     if (project.id !== projectId) {
@@ -439,7 +453,6 @@ export async function updateProjectSettings(
       provider: updated.settings.aiProvider,
       maxTokenBudget: updated.settings.maxTokenBudget,
       memoryUpdateBehavior: updated.settings.memoryUpdateBehavior,
-      ollamaUrl: updated.settings.ollamaUrl,
     });
   }
 
@@ -568,13 +581,16 @@ export async function ingestProjectChat(
     }
 
     if (payload.extracted) {
-      return payload.extracted;
+      // Validate even the echo path: the non-demo branch already does, and
+      // demo responses should not differ in shape guarantees.
+      return ExtractedMemorySchema.parse(payload.extracted);
     }
 
     return extractMemoryFromChat(
       payload.text ?? "",
       payload.mode ?? "Full extraction",
       demoProjectRecord.settings.aiProvider,
+      demoProjectRecord.settings.privacyMode,
     );
   }
 
@@ -596,6 +612,7 @@ export async function ingestProjectChat(
     payload.text ?? "",
     payload.mode ?? "Full extraction",
     project.settings.aiProvider,
+    project.settings.privacyMode,
   );
 
   if (payload.persist) {
@@ -639,6 +656,7 @@ export async function generateProjectCapsule(
         snapshot.memoryFiles,
         snapshot.repoScan,
         snapshot.project.settings.aiProvider,
+        snapshot.project.settings.privacyMode,
       );
 
   const markdown = renderCapsuleMarkdown(task, capsule);
@@ -673,6 +691,7 @@ export async function runProjectDriftCheck(projectId: string) {
     snapshot.memoryFiles,
     snapshot.repoScan,
     snapshot.project.settings.aiProvider,
+    snapshot.project.settings.privacyMode,
   );
   return {
     issues: analysis.issues,
