@@ -28,10 +28,13 @@ There are two related but **not automatically identical** representations:
 | Operation | Journal | Structured Markdown |
 | --- | --- | --- |
 | `contextforge checkpoint`, `remember` | Appends a validated event | Appends an item by default; `--no-sync` skips it |
+| `contextforge ingest-chat` (and dashboard chat ingest) | Appends one validated event per extracted entry | Appends one item per entry; repeated ingests of identical content are de-duplicated |
+| `contextforge handoff` | Appends one validated event per supplied note (`--done/--failed/--test/--blocker/--next`) | Appends one item per note |
+| `contextforge resume` | Reads journal for task-relevant records; appends nothing | Does not rewrite Markdown |
 | Python skill `save` | Appends a journal event | **Does not automatically update** Markdown |
-| `contextforge sync` | Imports eligible Markdown items not already found in the journal | Reads Markdown; does not rebuild it |
+| `contextforge sync` | Imports eligible Markdown items not already found in the journal (de-duplicated by text) | Reads Markdown; does not rebuild it |
 | `contextforge recall` | Reads journal for task-relevant records | Does not rewrite Markdown |
-| `contextforge audit` | Validates journal integrity | Summarizes Markdown |
+| `contextforge audit` | Validates journal integrity | Summarizes Markdown; reports unreadable files instead of failing |
 | `contextforge repair` | Attempts crash/corruption recovery and creates a backup | Does not guarantee a full restore of Markdown |
 
 This is **not an automatic two-way synchronization system**. The source code currently uses a text-match check during the Markdown-to-journal import, which may not detect semantically identical notes. Imported records may be skipped when input validation rejects them; check the journal and logs rather than assuming every note migrated.

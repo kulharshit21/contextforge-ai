@@ -71,4 +71,4 @@ The Node CLI and portable Python Skill share the hash-chained journal format. Py
 - **Implemented:** explicit records for completed work, failed methods, test evidence, blockers and next actions; task-scoped, size-bounded recall; no account or model API required.
 - **Not implemented:** automatic chat capture, AI verification of every record, automatic context handoff between every agent product, continuous background recording, or native model-compaction interception.
 - **Trust:** do not store secrets or personally sensitive content. Retrieved notes may be outdated, incorrect or attacker-controlled. Use `--source` when possible and check the repository before acting.
-- **Availability:** this command is a **source CLI feature** until its PR is merged and distributed. The published `v0.1.0-beta.1` source release does not include it, and the npm package is still private.
+- **Availability:** these commands ship in the source checkout on `main` (merged in PR #57). The published `v0.1.0-beta.1` source release does not include them, and the npm package is still private.

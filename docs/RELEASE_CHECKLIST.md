@@ -12,7 +12,7 @@ This document describes checks **before** declaring an official release. Do not 
 - [x] Move runtime loader dependencies (`tsx`) into production `dependencies`.
 - [x] Audit npm package contents with `npm pack --dry-run`.
 - [x] Rehearse install from a tarball in a clean directory with only production dependencies (`tests/tarball_install.test.cjs`).
-- [x] Verify `contextforge --help`, `init`, `checkpoint`, `remember`, `recall`, `scan`, `doctor`, `capsule`, and `export` from that clean install.
+- [x] Verify `contextforge --help`, `init`, `checkpoint`, `remember`, `recall`, `handoff`, `resume`, `ingest-chat`, `sync`, `scan`, `doctor`, `capsule`, `export`, and `skill` from that clean install.
 - [x] Add automated publish workflow (`.github/workflows/publish.yml`) with manual `workflow_dispatch` trigger, dry-run by default, and `release-approval` environment protection.
 - [ ] Check npm registry name availability and repository ownership (maintainer action).
 - [ ] Review changelog, tagged version, and migration notes.
