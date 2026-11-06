@@ -148,13 +148,36 @@ async function ensureProjectIndex() {
       projects: [],
     };
 
-  const hasStarter = stored.projects.some((project) => project.id === STARTER_PROJECT_ID);
-  if (!hasStarter) {
-    stored.projects.unshift(STARTER_PROJECT_RECORD);
-    await writeJsonPretty(WORKSPACE_INDEX_PATH, stored);
+  // One invalid record (hand-edited JSON, schema drift) must not make every
+  // project disappear from the dashboard; skip it with a warning, mirroring
+  // the corrupt-capsule tolerance. Validity is decided before the starter
+  // check: an invalid starter record would otherwise suppress the auto-re-add
+  // and still be filtered out below, leaving the workspace invisible.
+  const parsedProjects: ProjectRecord[] = [];
+  let sawInvalid = false;
+  for (const project of stored.projects) {
+    const parseResult = ProjectRecordSchema.safeParse(project);
+    if (parseResult.success) {
+      parsedProjects.push(parseResult.data);
+    } else {
+      sawInvalid = true;
+      console.warn(
+        `Skipping invalid project record "${String((project as { id?: unknown })?.id ?? "<no id>")}" in workspaces/projects.json:`,
+        parseResult.error.issues.map((issue) => issue.message).join("; "),
+      );
+    }
   }
 
-  return stored.projects.map((project) => ProjectRecordSchema.parse(project));
+  const hasStarter = parsedProjects.some((project) => project.id === STARTER_PROJECT_ID);
+  if (!hasStarter) {
+    parsedProjects.unshift(STARTER_PROJECT_RECORD);
+  }
+  if (!hasStarter || sawInvalid) {
+    // Persist the repaired view so invalid records and the re-added starter
+    // do not re-warn on every load.
+    await writeJsonPretty(WORKSPACE_INDEX_PATH, { projects: parsedProjects });
+  }
+  return parsedProjects;
 }
 
 async function writeProjectIndex(projects: ProjectRecord[]) {

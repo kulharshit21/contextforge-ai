@@ -1,10 +1,17 @@
-import { lstat, realpath, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { writeFile } from "node:fs/promises";
 
-import { checkpointMemory, recallContext } from "../../lib/memory/engine";
-import { refuseSensitive } from "../../lib/memory/journal";
+import {
+  appendMemoryItem,
+  buildItemTitle,
+  checkpointMemory,
+  KIND_TO_FILE_KEY,
+  loadMemoryFile,
+  recallContext,
+} from "../../lib/memory/engine";
+import { getActiveEvents, readJournalEvents, refuseSensitive } from "../../lib/memory/journal";
 import type { JournalEventKind } from "../../lib/memory/schemas";
 import { runRecallCommand } from "./recall";
+import { validateOutputPath } from "./output-path";
 
 export type HandoffCommandOptions = {
   done?: string;
@@ -66,38 +73,7 @@ function getNotes(task: string, options: HandoffCommandOptions): Note[] {
 
 // Fail early before journaling if the requested output file is occupied, or if
 // its parent path contains a symlink. Final writes still use exclusive-create.
-async function validateOutputPath(out: string | undefined, workspaceRoot: string): Promise<string | undefined> {
-  if (!out) return undefined;
-  const target = path.resolve(workspaceRoot, out);
-  const parent = path.dirname(target);
-  const parentInfo = await lstat(parent);
-  if (!parentInfo.isDirectory()) {
-    throw new Error(`Output parent is not a directory: ${parent}`);
-  }
-  // Compare canonical paths instead of rejecting system-level symlinks such
-  // as macOS /var -> /private/var. Internal project symlink escapes are still refused.
-  const lexicalRelative = path.relative(path.resolve(workspaceRoot), target);
-  const intendedInside = lexicalRelative !== ".."
-    && !lexicalRelative.startsWith(".." + path.sep)
-    && !path.isAbsolute(lexicalRelative);
-  if (intendedInside) {
-    const [realRoot, realParent] = await Promise.all([
-      realpath(workspaceRoot),
-      realpath(parent),
-    ]);
-    const relative = path.relative(realRoot, realParent);
-    if (relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
-      throw new Error(`Refusing output path outside project through symlink: ${out}`);
-    }
-  }
-  try {
-    await lstat(target);
-    throw new Error(`Refusing to overwrite existing output file: ${out}`);
-  } catch (error) {
-    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
-  }
-  return target;
-}
+// (The implementation lives in ./output-path and is shared with `recall`/`resume`.)
 
 /**
  * Explicitly checkpoint verified end-of-session facts, then return a bounded
@@ -135,13 +111,43 @@ export async function runHandoffCommand(
     }
   }
 
+  // Re-running an identical handoff (common after a commit changes the
+  // auto-generated git anchor, which the journal dedupe keys on) must not
+  // duplicate notes. Dedupe on kind + full note text against active records;
+  // for notes the journal already holds, still re-sync the Markdown mirror
+  // in case it lost the item (manual edit, mirror cap aging).
+  const recorded = new Set(
+    getActiveEvents(await readJournalEvents(workspaceRoot))
+      .map((event) => `${event.kind}:${event.text}`),
+  );
+  let skipped = 0;
   for (const note of notes) {
+    if (recorded.has(`${note.kind}:${note.text}`)) {
+      skipped++;
+      const fileKey = KIND_TO_FILE_KEY[note.kind];
+      const mirrorItems = (await loadMemoryFile(workspaceRoot, fileKey)).items;
+      if (!mirrorItems.some((item) => item.content.trim() === note.text)) {
+        await appendMemoryItem(workspaceRoot, fileKey, {
+          type: note.kind,
+          title: buildItemTitle(note.text),
+          content: note.text,
+          source: options.source || "cli:handoff",
+          confidence: 0.9,
+          related_files: [],
+          tags: ["session-handoff"],
+        });
+      }
+      continue;
+    }
     await checkpointMemory(workspaceRoot, {
       text: note.text,
       kind: note.kind,
       source: options.source,
       tags: ["session-handoff"],
     });
+  }
+  if (skipped > 0) {
+    console.log(`Skipped ${skipped} already-recorded handoff note(s).`);
   }
 
   const result = await recallContext(workspaceRoot, {
