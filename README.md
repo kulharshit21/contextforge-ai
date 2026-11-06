@@ -157,6 +157,6 @@ Issues and thoughtful pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBU
 
 ## Project status
 
-ContextForge is maintained by [@kulharshit21](https://github.com/kulharshit21). Its CLI and skill have automated tests, but the project has **no published package or tagged release**, no demonstrated independent adoption benchmark, and no claim of production-grade public hosting. See the [changelog](CHANGELOG.md) and [release checklist](docs/RELEASE_CHECKLIST.md).
+ContextForge is maintained by [@kulharshit21](https://github.com/kulharshit21). Its CLI and skill have automated tests and an [early-access GitHub prerelease](https://github.com/kulharshit21/contextforge-ai/releases/tag/v0.1.0-beta.1), but there is **no published npm package**, no demonstrated independent adoption benchmark, and no claim of production-grade public hosting. The [security-patched beta.2 notes](docs/releases/v0.1.0-beta.2.md) are prepared but **not yet published**. See the [changelog](CHANGELOG.md) and [release checklist](docs/RELEASE_CHECKLIST.md).
 
 Licensed under [MIT](LICENSE).
