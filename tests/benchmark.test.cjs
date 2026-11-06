@@ -52,6 +52,13 @@ test("reproducible context-retention benchmark against equal-budget baselines", 
     `ContextForge should neutralize prompt injections (leaked: ${cf.total_injections_leaked} vs recency: ${rec.total_injections_leaked})`
   );
 
+  // 3b. Stale-record leakage: superseded records must never surface in
+  // retrieval, or recall numbers inflate while handing agents stale facts.
+  assert.ok(
+    cf.stale_leak_mean <= 0,
+    `ContextForge must not leak superseded records (stale_leak_mean: ${cf.stale_leak_mean})`
+  );
+
   // 4. Recovery Latency
   assert.ok(
     cf.latency_mean_ms < 250,

@@ -337,7 +337,18 @@ export async function scanRepository(workspaceRoot: string): Promise<RepoScan> {
 
   const gitFacts = await getGitFacts(workspaceRoot);
   const packageManager = await detectPackageManager(workspaceRoot);
-  const framework = detectFramework(packageJson, [...appRoutes, ...apiRoutes]);
+  // Python entrypoints never appear in the route globs (they match only
+  // .ts/.tsx/.js), so probe for them explicitly or the FastAPI detection
+  // stays dead code and Python repos always scan as "unknown".
+  const pythonEntryPoints = await filterToRootFiles(
+    workspaceRoot,
+    await fg(["main.py", "src/main.py", "app/main.py"], {
+      cwd: workspaceRoot,
+      followSymbolicLinks: false,
+      onlyFiles: true,
+    }),
+  );
+  const framework = detectFramework(packageJson, [...appRoutes, ...apiRoutes, ...pythonEntryPoints]);
   const scripts =
     typeof packageJson?.scripts === "object"
       ? (packageJson.scripts as Record<string, string>)

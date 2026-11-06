@@ -1,5 +1,6 @@
 import { formatDateTime } from "../utils/date";
 
+import { fencedMarkdown } from "./capsule";
 import type { Capsule, DriftIssue, MemoryFile, RepoScan } from "./schemas";
 
 type ExportContext = {
@@ -176,9 +177,7 @@ function buildCapsuleExport(context: ExportContext) {
     "",
     "## Agent Prompt",
     "",
-    "```md",
-    context.latestCapsule.agent_prompt,
-    "```",
+    ...fencedMarkdown(context.latestCapsule.agent_prompt),
   ].join("\n");
 }
 

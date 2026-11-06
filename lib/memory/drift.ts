@@ -62,6 +62,30 @@ export function detectMemoryDrift(
     }
 
     if (pattern.test(memoryText)) {
+      // Comparison and decision notes legitimately name rival frameworks
+      // ("chose Next.js over Express"); only flag when the detected
+      // framework is never mentioned anywhere in memory.
+      const detectedPattern = FRAMEWORK_KEYWORDS[repoScan.framework];
+      if (detectedPattern && detectedPattern.test(memoryText)) {
+        continue;
+      }
+
+      if (repoScan.framework === "unknown") {
+        // The scan could not identify a framework, so there is nothing to
+        // compare against — flag honestly at medium instead of suggesting
+        // memory "reflect unknown".
+        issues.push({
+          severity: "medium",
+          title: `Memory mentions ${framework}, repo scan did not detect a framework`,
+          description:
+            "Saved project memory references a framework the repository scan could not confirm. The scan may have missed it, or the memory is stale.",
+          suggested_fix: `Rerun 'contextforge scan' and check which framework the project actually uses; then update memory to match reality.`,
+          evidence: [`Repo scan framework: ${repoScan.framework}`, `Detected keyword for ${framework} in memory.`],
+          status: "open",
+        });
+        continue;
+      }
+
       issues.push({
         severity: "high",
         title: `Memory mentions ${framework}, repo scan says ${repoScan.framework}`,

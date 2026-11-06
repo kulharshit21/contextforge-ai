@@ -20,9 +20,11 @@ import {
   appendJournalEvent,
   auditJournal,
   readJournalEvents,
+  refuseSensitive,
   releaseWriterLock,
   repairJournal,
 } from "./journal";
+import { fencedMarkdown } from "./capsule";
 import { parseMemoryFile, renderMemoryFile } from "./markdown";
 import {
   CapsuleSchema,
@@ -687,6 +689,15 @@ export async function mergeExtractedMemory(
 ) {
   const createdItems: MemoryItem[] = [];
 
+  // Screen every entry before committing any: a single credential-bearing
+  // segment must fail the whole ingest up front instead of leaving a partial
+  // commit and a bare error (same contract as the handoff command).
+  for (const entries of Object.values(extracted)) {
+    for (const entry of entries) {
+      refuseSensitive(entry.content);
+    }
+  }
+
   for (const [section, entries] of Object.entries(extracted) as Array<
     [keyof ExtractedMemory, ExtractedMemory[keyof ExtractedMemory]]
   >) {
@@ -778,9 +789,7 @@ export async function saveCapsule(
       "",
       `## Agent Prompt`,
       "",
-      "```md",
-      parsed.agent_prompt,
-      "```",
+      ...fencedMarkdown(parsed.agent_prompt),
     ].join("\n"),
     {
       task,
