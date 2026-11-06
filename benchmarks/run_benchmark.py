@@ -54,9 +54,11 @@ def setup_workspace(scenario: dict, temp_dir: Path) -> List[dict]:
             "created_at": timestamp,
             "kind": raw["kind"],
             "text": raw["text"],
-            "source": raw.get("source"),
+            # The Node journal schema requires strings (null fails zod), so
+            # missing sources and supersede links must serialize as "".
+            "source": raw.get("source") or "",
             "tags": raw.get("tags", []),
-            "supersedes": supersedes_id,
+            "supersedes": supersedes_id or "",
             "previous": prev_digest,
         }
         event["digest"] = compute_digest(event)
@@ -123,19 +125,30 @@ def baseline_uniform(events: List[dict], budget: int, seed: int = 42) -> Tuple[s
     return text_out, selected, elapsed_ms
 
 
-def contextforge_retrieval(workspace: Path, query: str, budget: int) -> Tuple[str, List[dict], float]:
+def contextforge_retrieval(workspace: Path, query: str, budget: int,
+                           memory_script: Path | None = None) -> Tuple[str, List[dict], float]:
     """ContextForge lexical retrieval via Python memory engine."""
+    script = Path(memory_script) if memory_script is not None else MEMORY_SCRIPT
     t_start = time.perf_counter()
     cmd = [
         sys.executable,
-        str(MEMORY_SCRIPT),
+        str(script),
         "--root", str(workspace),
         "recall",
         "--task", query,
         "--budget-chars", str(budget)
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    # The child now emits UTF-8 regardless of console code page; decode as
+    # UTF-8 here so non-ASCII workspaces cannot corrupt or crash the harness.
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     elapsed_ms = (time.perf_counter() - t_start) * 1000.0
+
+    # A failed recall previously produced empty output that was silently
+    # recorded as zero scores, poisoning regression comparisons.
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"ContextForge recall failed (exit {proc.returncode}): {proc.stderr.strip()}"
+        )
 
     output = proc.stdout.strip()
     return output, [], elapsed_ms
@@ -336,4 +349,6 @@ def run_benchmark(budget: int = 1200) -> Dict[str, Any]:
 
 if __name__ == "__main__":
     budget = int(sys.argv[1]) if len(sys.argv) > 1 else 1200
+    if budget < 500 or budget > 100000:
+        raise SystemExit("Budget must be between 500 and 100000 characters")
     run_benchmark(budget)

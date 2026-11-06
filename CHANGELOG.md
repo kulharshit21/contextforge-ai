@@ -4,6 +4,14 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Fixed Python Skill reliability and Node parity issues (verified by reproduction):
+  - `recall` now enforces the strict budget like the Node CLI: an oversized `--task` header fails with "Task description is too long for the requested context budget" instead of silently emitting output up to 3.75× the requested budget. The budget floor also aligns to 500 characters (was 600).
+  - The skill pins stdio to UTF-8: piped `recall` of non-ASCII notes no longer crashes with a cp1252 `charmap` encode error on Windows, and `save --stdin` no longer stores mojibake for UTF-8 input.
+  - stdin accepts the normal trailing-newline form of a 4000-character note (read limit 4096, length checked after stripping) instead of rejecting it at 3999.
+  - Secret-pattern detection uses ASCII word boundaries like the Node detector, so tokens prefixed with accented characters (e.g. `ésk_…`) are refused consistently.
+  - Repair backup timestamps match the Node CLI format (`events.jsonl.bak.YYYYMMDDHHMMSS`).
+  - The benchmark harness serializes `source`/`supersedes` as `""` instead of `null` (the Node journal schema rejected harness-written workspaces), raises on child-process recall failures instead of recording silent zero scores, decodes child output as UTF-8, and validates the CLI budget argument.
+
 - Hardened dashboard API filesystem boundaries (local, unauthenticated endpoints):
   - `PUT /api/memory` now validates `fileKey` at runtime with zod. Previously a request with a traversal value such as `../../../../name` (accepted despite the TypeScript union type) could write attacker-controlled `.md` files outside the project workspace, including overwriting unrelated repositories' agent instruction files.
   - `saveMemoryFile`/`saveMemoryFileRaw` reject unknown memory file keys before path construction, closing the same hole for any non-HTTP caller.
