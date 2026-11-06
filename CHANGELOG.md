@@ -4,6 +4,14 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Fixed Python Skill reliability and Node parity issues (verified by reproduction):
+  - `recall` now enforces the strict budget like the Node CLI: an oversized `--task` header fails with "Task description is too long for the requested context budget" instead of silently emitting output up to 3.75× the requested budget. The budget floor also aligns to 500 characters (was 600).
+  - The skill pins stdio to UTF-8: piped `recall` of non-ASCII notes no longer crashes with a cp1252 `charmap` encode error on Windows, and `save --stdin` no longer stores mojibake for UTF-8 input.
+  - stdin accepts the normal trailing-newline form of a 4000-character note (read limit 4096, length checked after stripping) instead of rejecting it at 3999.
+  - Secret-pattern detection uses ASCII word boundaries like the Node detector, so tokens prefixed with accented characters (e.g. `ésk_…`) are refused consistently.
+  - Repair backup timestamps match the Node CLI format (`events.jsonl.bak.YYYYMMDDHHMMSS`).
+  - The benchmark harness serializes `source`/`supersedes` as `""` instead of `null` (the Node journal schema rejected harness-written workspaces), raises on child-process recall failures instead of recording silent zero scores, decodes child output as UTF-8, and validates the CLI budget argument.
+
 - Closed memory data-loss paths in the Node engine (verified by reproduction):
   - `contextforge repair` now holds the journal writer lock across its entire read→backup→rebuild sequence and swaps the rebuilt journal in atomically. Previously the backup-rename window left `events.jsonl` absent; an append committed in that gap was silently overwritten (reproduced: the committed event existed in neither the journal nor the backup).
   - `contextforge ingest-chat` (and dashboard chat ingest) now journal every extracted entry in addition to the Markdown mirror. Recall reads only the journal, so previously ingested memories were invisible to `recall` until a manual `sync`, and any item aged out of the mirror's 50-item-per-file cap was permanently lost.

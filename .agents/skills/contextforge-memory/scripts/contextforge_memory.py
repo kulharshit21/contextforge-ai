@@ -26,14 +26,14 @@ STOP = set("the and for with from that this into about your then were when will 
 LOCK_TIMEOUT_SECONDS = 60
 
 SENSITIVE = (
-    re.compile(r"-----BEGIN\s+(?:RSA|EC|OPENSSH|DSA)?\s*PRIVATE KEY-----", re.I),
-    re.compile(r"\b(?:sk|ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_-]{18,}\b"),
-    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{22,}\b"),
-    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
-    re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}\b"),
-    re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
-    re.compile(r"\b(?:api[_-]?key|access[_-]?token|password|secret|authorization)\s*[:=]\s*[\"']?\S{8,}", re.I),
-    re.compile(r"\bBearer\s+[A-Za-z0-9_\-\.]{20,}\b", re.I),
+    re.compile(r"-----BEGIN\s+(?:RSA|EC|OPENSSH|DSA)?\s*PRIVATE KEY-----", re.I | re.ASCII),
+    re.compile(r"\b(?:sk|ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_-]{18,}\b", re.ASCII),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{22,}\b", re.ASCII),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b", re.ASCII),
+    re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}\b", re.ASCII),
+    re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b", re.ASCII),
+    re.compile(r"\b(?:api[_-]?key|access[_-]?token|password|secret|authorization)\s*[:=]\s*[\"']?\S{8,}", re.I | re.ASCII),
+    re.compile(r"\bBearer\s+[A-Za-z0-9_\-\.]{20,}\b", re.I | re.ASCII),
 )
 
 INJECTION_PATTERNS = (
@@ -249,8 +249,8 @@ def terms(text: str) -> set[str]:
     return {word.lower() for word in TOKEN.findall(text) if word.lower() not in STOP}
 
 def compact(records: list[dict], task: str, budget: int) -> str:
-    if budget < 600 or budget > 100000:
-        raise ValueError("Character budget must be between 600 and 100000")
+    if budget < 500 or budget > 100000:
+        raise ValueError("Character budget must be between 500 and 100000")
     chosen = active_events(records)
     needles = terms(task)
     scored = []
@@ -276,6 +276,11 @@ def compact(records: list[dict], task: str, budget: int) -> str:
         "## Relevant retained records",
     ]
     output = "\n".join(header) + "\n"
+    # The header itself (task text included) must fit the budget, matching the
+    # Node CLI behavior; otherwise the recall output would silently exceed the
+    # caller's strict budget.
+    if len(output) > budget:
+        raise ValueError("Task description is too long for the requested context budget")
     kept = 0
     for score, e in scored:
         note = " ".join(e["text"].split())
@@ -339,7 +344,8 @@ def repair_storage(path: Path, break_lock: bool = False) -> tuple[int, int, str 
 
     backup_name = None
     if has_corruption:
-        ts_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        # Match the Node CLI's backup timestamp format for operator familiarity.
+        ts_str = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         backup_path = path / f"events.jsonl.bak.{ts_str}"
         log.rename(backup_path)
         backup_name = str(backup_path)
@@ -356,7 +362,25 @@ def repair_storage(path: Path, break_lock: bool = False) -> tuple[int, int, str 
 
     return len(valid_events), truncated_count, backup_name
 
+def force_utf8_stdio() -> None:
+    """Pin stdio to UTF-8 regardless of console code page.
+
+    On Windows, redirected pipes default to the ANSI code page (cp1252 on
+    most systems): piped recall of non-ASCII notes crashed with a charmap
+    encode error, and `save --stdin` silently stored mojibake because UTF-8
+    bytes were decoded as cp1252. Both break the Node CLI/Skill interop
+    contract that the journal is UTF-8.
+    """
+    for stream, errors in ((sys.stdin, "replace"), (sys.stdout, "strict"), (sys.stderr, "strict")):
+        try:
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8", errors=errors)
+        except (ValueError, OSError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    force_utf8_stdio()
     parser = argparse.ArgumentParser(description="ContextForge agent memory, local and offline")
     parser.add_argument("--root", default=".", help="Project root (default: working directory)")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -385,8 +409,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ContextForge memory initialized: {directory}")
             return 0
         if args.command == "save":
-            note = sys.stdin.read(4001) if args.stdin else args.text
-            refuse_sensitive(note)
+            # Read a little over the 4000-char limit so a trailing newline
+            # (the normal `echo note | save --stdin` case) does not push a
+            # 4000-char note over the limit; validation runs on the stripped
+            # note for stdin input while --text keeps Node-identical raw checks.
+            note = sys.stdin.read(4096) if args.stdin else args.text
+            refuse_sensitive(note.strip() if args.stdin else note)
             if args.source:
                 if any(ord(c) < 32 and c not in "\t" for c in args.source):
                     raise ValueError("Source reference contains invalid control characters or newlines")

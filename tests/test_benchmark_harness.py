@@ -1,4 +1,5 @@
 """Regression checks for benchmark harness, baselines, and supersession links."""
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 from benchmarks.run_benchmark import (
     baseline_recency,
     baseline_uniform,
+    contextforge_retrieval,
     setup_workspace,
 )
 
@@ -64,9 +66,39 @@ class BenchmarkBaselineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             events = setup_workspace(scenario, Path(tmpdir))
             self.assertEqual(len(events), 2)
-            self.assertIsNone(events[0]["supersedes"])
+            self.assertEqual(events[0]["supersedes"], "")
             self.assertEqual(events[1]["supersedes"], "000000000001")
             self.assertEqual(events[1]["previous"], events[0]["digest"])
+
+    def test_setup_workspace_serializes_no_null_fields(self):
+        """The Node journal schema rejects null source/supersedes; a harness
+        workspace must be readable by both implementations."""
+        scenario = {
+            "events": [
+                {"kind": "fact", "text": "Event without a source"},  # no source key
+                {"kind": "next", "text": "Event without supersede", "source": "docs/NEXT.md"},
+            ]
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            setup_workspace(scenario, workspace)
+            events_file = workspace / ".contextforge" / "agent-memory" / "events.jsonl"
+            for line in events_file.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                event = json.loads(line)
+                self.assertIsInstance(event.get("source"), str)
+                self.assertIsInstance(event.get("supersedes"), str)
+
+    def test_retrieval_failure_raises_instead_of_silent_zero(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            setup_workspace({"events": [{"kind": "fact", "text": "harness probe event"}]}, workspace)
+            with self.assertRaises(RuntimeError):
+                contextforge_retrieval(
+                    workspace, "probe", 5000000,
+                    memory_script=Path("Z:/definitely/missing/script.py"),
+                )
 
 
 if __name__ == "__main__":
