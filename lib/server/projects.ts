@@ -154,7 +154,22 @@ async function ensureProjectIndex() {
     await writeJsonPretty(WORKSPACE_INDEX_PATH, stored);
   }
 
-  return stored.projects.map((project) => ProjectRecordSchema.parse(project));
+  // One invalid record (hand-edited JSON, schema drift) must not make every
+  // project disappear from the dashboard; skip it with a warning, mirroring
+  // the corrupt-capsule tolerance.
+  const parsedProjects: ProjectRecord[] = [];
+  for (const project of stored.projects) {
+    const parseResult = ProjectRecordSchema.safeParse(project);
+    if (parseResult.success) {
+      parsedProjects.push(parseResult.data);
+    } else {
+      console.warn(
+        `Skipping invalid project record "${String((project as { id?: unknown })?.id ?? "<no id>")}" in workspaces/projects.json:`,
+        parseResult.error.issues.map((issue) => issue.message).join("; "),
+      );
+    }
+  }
+  return parsedProjects;
 }
 
 async function writeProjectIndex(projects: ProjectRecord[]) {

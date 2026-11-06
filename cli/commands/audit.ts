@@ -23,5 +23,13 @@ export async function runAuditCommand(
     console.log(`Kinds: ${breakdown || "none"}`);
     console.log(`Lock status: ${j.lockStatus}`);
     console.log(`Structured markdown files: ${result.markdown.fileCount}`);
+    for (const markdownError of result.markdown.errors) {
+      console.log(`Markdown error: ${markdownError}`);
+    }
+  } else if (result.markdown.errors.length > 0) {
+    console.log(`Markdown errors (${result.markdown.errors.length}; rerun with --verbose for the journal-kind breakdown):`);
+    for (const markdownError of result.markdown.errors) {
+      console.log(`- ${markdownError}`);
+    }
   }
 }

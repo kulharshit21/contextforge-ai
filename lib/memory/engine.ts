@@ -616,16 +616,27 @@ export async function recallContext(
 export async function auditAllMemory(workspaceRoot: string) {
   await initWorkspace(workspaceRoot);
   const journal = await auditJournal(workspaceRoot);
-  const memoryFiles = await loadMemoryFiles(workspaceRoot);
+  // Audit is the diagnostic tool for a partially broken workspace: one
+  // unreadable or malformed memory file must not blind it. Report per-file
+  // errors and still deliver the journal integrity verdict.
   const markdownSummary: Record<string, number> = {};
-  for (const f of memoryFiles) {
-    markdownSummary[f.file_key] = f.items.length;
+  const markdownErrors: string[] = [];
+  for (const definition of MEMORY_FILE_DEFINITIONS) {
+    try {
+      const raw = await readFile(getMemoryFilePath(workspaceRoot, definition.key), "utf8");
+      markdownSummary[definition.key] = parseMemoryFile(raw).items.length;
+    } catch (error) {
+      markdownErrors.push(
+        `${definition.key}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
   return {
     journal,
     markdown: {
-      fileCount: memoryFiles.length,
+      fileCount: MEMORY_FILE_DEFINITIONS.length - markdownErrors.length,
       items: markdownSummary,
+      errors: markdownErrors,
     },
   };
 }
@@ -704,6 +715,16 @@ export async function mergeExtractedMemory(
         source: entry.source || source,
         tags: entry.tags,
       });
+      // The journal de-duplicates identical content; the mirror must too, or
+      // re-ingesting the same chat file grows duplicate mirror entries.
+      const mirrorItems = (await loadMemoryFile(workspaceRoot, fileKey)).items;
+      const isMirrored = mirrorItems.some(
+        (existing) =>
+          existing.type === section && existing.content.trim() === entry.content.trim(),
+      );
+      if (isMirrored) {
+        continue;
+      }
       const item = await appendMemoryItem(workspaceRoot, fileKey, {
         type: section,
         title: entry.title,
@@ -722,10 +743,20 @@ export async function mergeExtractedMemory(
 
 export async function readRepoScan(workspaceRoot: string) {
   await initWorkspace(workspaceRoot);
-  const scan =
-    (await readJsonIfExists<unknown>(getRepoScanPath(workspaceRoot))) ??
-    buildDefaultRepoScan(workspaceRoot);
-  return RepoScanSchema.parse(scan);
+  try {
+    const scan =
+      (await readJsonIfExists<unknown>(getRepoScanPath(workspaceRoot))) ??
+      buildDefaultRepoScan(workspaceRoot);
+    return RepoScanSchema.parse(scan);
+  } catch (error) {
+    // A corrupt repo-scan.json (invalid JSON or schema drift) must not fail
+    // the whole project snapshot; degrade to a default scan and say so. The
+    // write path (writeRepoScan) stays strict.
+    console.warn(
+      `Ignoring unreadable repo-scan.json (${error instanceof Error ? error.message : String(error)}); regenerate it with 'contextforge scan'.`,
+    );
+    return buildDefaultRepoScan(workspaceRoot);
+  }
 }
 
 export async function writeRepoScan(workspaceRoot: string, scan: unknown) {
@@ -808,6 +839,12 @@ export async function listSavedCapsules(workspaceRoot: string) {
         try {
           const raw = await readFile(filePath, "utf8");
           const parsed = matter(raw);
+          // Files that parse but carry no capsule frontmatter (empty file,
+          // stray notes, binary junk) would show up as ghost entries with a
+          // file-name "task" and zero counters; skip those too.
+          if (parsed.data.task === undefined && parsed.data.created_at === undefined) {
+            return null;
+          }
           return {
             id: entry.name,
             fileName: entry.name,

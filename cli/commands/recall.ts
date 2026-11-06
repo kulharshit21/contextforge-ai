@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { recallContext } from "../../lib/memory/engine";
 import { type ContextLevel, CONTEXT_LEVELS } from "../../lib/memory/schemas";
+import { validateOutputPath } from "./output-path";
 
 export type RecallCommandOptions = {
   task?: string;
@@ -38,9 +39,14 @@ export async function runRecallCommand(
   });
 
   if (options.out) {
+    // Same output-path rules as `handoff --out`: exclusive create, no existing
+    // file, no symlink escape out of the project. Validate before writing.
+    const destination = await validateOutputPath(options.out, workspaceRoot);
+    if (!destination) {
+      throw new Error("Output path was not provided");
+    }
     try {
-      // Exclusive create prevents recall from clobbering existing project files.
-      await writeFile(options.out, result.output, { encoding: "utf8", flag: "wx" });
+      await writeFile(destination, result.output, { encoding: "utf8", flag: "wx" });
     } catch (error) {
       if (error instanceof Error && "code" in error && error.code === "EEXIST") {
         throw new Error(`Refusing to overwrite existing output file: ${options.out}`);

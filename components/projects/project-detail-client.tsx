@@ -38,6 +38,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { Capsule, DriftIssue, MemoryFile, ProjectSettings, RepoScan } from "@/lib/memory/schemas";
 
+// Surface the API validation message (zod/lib errors) instead of a fixed
+// string, so users see why a request was rejected.
+async function readErrorResponse(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await response.json()) as { error?: string };
+    return body.error ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 type ProjectDetailProps = {
   project: {
     id: string;
@@ -172,7 +183,7 @@ export function ProjectDetailClient({
       });
 
       if (!response.ok) {
-        throw new Error("Failed to save memory file.");
+        throw new Error(await readErrorResponse(response, "Failed to save memory file."));
       }
 
       toast.success("Memory file updated.");
@@ -199,7 +210,7 @@ export function ProjectDetailClient({
       });
 
       if (!response.ok) {
-        throw new Error("Capsule generation failed.");
+        throw new Error(await readErrorResponse(response, "Capsule generation failed."));
       }
 
       const payload = await response.json();
@@ -237,7 +248,7 @@ export function ProjectDetailClient({
       });
 
       if (!response.ok) {
-        throw new Error("Failed to save capsule.");
+        throw new Error(await readErrorResponse(response, "Failed to save capsule."));
       }
 
       toast.success("Capsule saved.");
@@ -269,7 +280,7 @@ export function ProjectDetailClient({
       });
 
       if (!response.ok) {
-        throw new Error("Chat extraction failed.");
+        throw new Error(await readErrorResponse(response, "Chat extraction failed."));
       }
 
       const payload = await response.json();
@@ -304,7 +315,7 @@ export function ProjectDetailClient({
       });
 
       if (!response.ok) {
-        throw new Error("Repo scan upload failed.");
+        throw new Error(await readErrorResponse(response, "Repo scan upload failed."));
       }
 
       toast.success("Repo scan JSON saved.");
@@ -330,7 +341,7 @@ export function ProjectDetailClient({
       });
 
       if (!response.ok) {
-        throw new Error("Local scan failed.");
+        throw new Error(await readErrorResponse(response, "Local scan failed."));
       }
 
       toast.success("Project scan refreshed.");
@@ -356,7 +367,7 @@ export function ProjectDetailClient({
       });
 
       if (!response.ok) {
-        throw new Error("Drift check failed.");
+        throw new Error(await readErrorResponse(response, "Drift check failed."));
       }
 
       const payload = await response.json();
@@ -387,7 +398,7 @@ export function ProjectDetailClient({
       });
 
       if (!response.ok) {
-        throw new Error("Export generation failed.");
+        throw new Error(await readErrorResponse(response, "Export generation failed."));
       }
 
       const payload = await response.json();
@@ -420,7 +431,7 @@ export function ProjectDetailClient({
       });
 
       if (!response.ok) {
-        throw new Error("Settings update failed.");
+        throw new Error(await readErrorResponse(response, "Settings update failed."));
       }
 
       toast.success("Project settings updated.");
@@ -811,8 +822,8 @@ export function ProjectDetailClient({
                   </select>
                 </div>
 
-                <Button type="submit" className="w-full sm:w-fit">
-                  Save Settings
+                <Button type="submit" className="w-full sm:w-fit" disabled={settingsForm.formState.isSubmitting}>
+                  {settingsForm.formState.isSubmitting ? "Saving..." : "Save Settings"}
                 </Button>
               </form>
             </CardContent>

@@ -241,19 +241,33 @@ export async function extractMemoryFromChat(
   const chunks = chunkText(chatText);
   const merged = ExtractedMemorySchema.parse({});
 
-  for (const chunk of chunks) {
-    const output = await resolution.provider.generateText({
-      systemPrompt: buildChatExtractionPrompt(mode),
-      userPrompt: chunk,
-      temperature: 0.1,
-    });
+  try {
+    for (const chunk of chunks) {
+      const output = await resolution.provider.generateText({
+        systemPrompt: buildChatExtractionPrompt(mode),
+        userPrompt: chunk,
+        temperature: 0.1,
+      });
 
-    const parsed = parseJsonSafely(output.text, ExtractedMemorySchema);
-    const extracted = parsed ?? heuristicExtractMemory(chunk, mode);
+      const parsed = parseJsonSafely(output.text, ExtractedMemorySchema);
+      const extracted = parsed ?? heuristicExtractMemory(chunk, mode);
 
-    for (const key of Object.keys(merged) as Array<keyof ExtractedMemory>) {
-      merged[key].push(...extracted[key]);
+      for (const key of Object.keys(merged) as Array<keyof ExtractedMemory>) {
+        merged[key].push(...extracted[key]);
+      }
     }
+  } catch (error) {
+    // Capsule and drift generation degrade to their deterministic paths when
+    // a provider is unreachable; extraction should degrade the same way
+    // instead of failing the ingest with a raw fetch error.
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      extracted: heuristicExtractMemory(chatText, mode),
+      provider: {
+        ...resolution,
+        warning: `Provider call failed (${detail}); falling back to deterministic extraction.`,
+      },
+    };
   }
 
   return {
