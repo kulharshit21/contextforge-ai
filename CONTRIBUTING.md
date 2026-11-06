@@ -36,6 +36,8 @@ Use the PR template, allow the CI workflow to complete, and address feedback in 
 
 PRs are squash-merged, so the PR title becomes the commit message. Title PRs in the form the project already uses — `type(scope): short imperative summary` — for example `fix(memory): close data-loss paths in repair`, `feat(skill): add lifecycle commands`, `docs: restructure README`. Keep the summary lowercase without a trailing period. This keeps `CHANGELOG.md` and release notes readable without extra tooling.
 
+A CI check (`.github/workflows/semantic-pr-title.yml`) validates PR titles against this convention. Dependabot PRs are exempt; for an exceptional PR a maintainer can apply the `skip-semantic-title` label to bypass the check.
+
 ## Starter tasks
 
 Issues labeled `good first issue` are scoped for a first contribution and link to the relevant code paths. If an issue labeled `help wanted` interests you, comment before starting so work is not duplicated.

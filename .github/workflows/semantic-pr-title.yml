@@ -1,0 +1,42 @@
+name: "Semantic PR title"
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+
+jobs:
+  main:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    # Dependabot titles ("Bump x from y to z") do not follow the convention;
+    # the escape hatch label lets a maintainer override for exceptional PRs.
+    if: github.repository == 'kulharshit21/contextforge-ai' && github.actor != 'dependabot[bot]'
+    steps:
+      - uses: amannn/action-semantic-pull-request@2252a14e810aa9b85c2d560bd7070c802206ecf6 # v6.1.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Types match CONTRIBUTING.md ("Pull request titles"): PRs are
+          # squash-merged, so the title becomes the commit message.
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+          ignoreLabels: |
+            skip-semantic-title
