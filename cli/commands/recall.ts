@@ -28,6 +28,11 @@ export async function runRecallCommand(
   }
 
   const budgetChars = options.budgetChars ? Number(options.budgetChars) : undefined;
+  if (options.format !== undefined && !["markdown", "json"].includes(options.format)) {
+    throw new Error(
+      `Invalid format: '${options.format}'. Must be one of: markdown, json`,
+    );
+  }
   const format = options.format === "json" ? "json" : "markdown";
 
   const result = await recallContext(workspaceRoot, {

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { type DriftIssue, type MemoryFile, type RepoScan } from "./schemas";
@@ -94,19 +95,40 @@ export function detectMemoryDrift(
     file.items.flatMap((item) => item.related_files),
   );
 
+  const existenceCache = new Map<string, boolean>();
   for (const relatedFile of [...new Set(relatedFiles)]) {
-    const normalized = relatedFile.replace(/\\/g, "/");
-    if (!fileUniverse.has(normalized)) {
-      issues.push({
-        severity: "medium",
-        title: `Memory references a file not seen in the repo scan: ${normalized}`,
-        description:
-          "A memory item points to a file that the latest repo scan did not find. The file may have moved, been deleted, or been renamed.",
-        suggested_fix: `Update the related file references for ${normalized} or rescan the repo if the file was recently added.`,
-        evidence: [`Related file: ${normalized}`, `Workspace root: ${path.basename(workspaceRoot)}`],
-        status: "open",
-      });
+    const normalized = relatedFile.replace(/\\/g, "/").replace(/^\.\//, "");
+    if (fileUniverse.has(normalized)) {
+      continue;
     }
+    // The scan universe only indexes a subset of the repo (app/src/lib/
+    // components plus a few root files), so valid anchors in docs/, tests/,
+    // scripts/, benchmarks/ or .github/ would always be false-flagged.
+    // Verify against the filesystem instead; non-file references (git
+    // anchors, URLs, issue ids) are skipped.
+    if (/^(?:git:|https?:\/\/|#)/i.test(relatedFile)) {
+      continue;
+    }
+    const absoluteTarget = path.isAbsolute(normalized)
+      ? path.resolve(normalized)
+      : path.resolve(workspaceRoot, normalized);
+    let exists = existenceCache.get(absoluteTarget);
+    if (exists === undefined) {
+      exists = existsSync(absoluteTarget);
+      existenceCache.set(absoluteTarget, exists);
+    }
+    if (exists) {
+      continue;
+    }
+    issues.push({
+      severity: "medium",
+      title: `Memory references a file that does not exist: ${normalized}`,
+      description:
+        "A memory item points to a file that is neither in the latest repo scan nor on disk. The file may have moved, been deleted, or been renamed.",
+      suggested_fix: `Update the related file references for ${normalized} or rescan the repo if the file was recently added.`,
+      evidence: [`Related file: ${normalized}`, `Workspace root: ${path.basename(workspaceRoot)}`],
+      status: "open",
+    });
   }
 
   const memoryEnvVars = extractEnvVars(memoryText);

@@ -59,6 +59,46 @@ function assertNoSymlinks(input: string) {
     current = parent;
   }
 }
+// A torn install (crash or disk-full mid-copy) leaves only managed-path
+// names, no manifest, and every file a byte-prefix of (or equal to) the
+// source file it was being copied from. That shape is provably ContextForge's
+// own partial output — recoverable under --force / uninstall. User-owned
+// files at managed paths never satisfy the content check.
+function isPrefixCopy(target: string, source: string): boolean {
+  if (!fs.statSync(target).isFile()) return false;
+  const content = fs.readFileSync(target);
+  const src = fs.readFileSync(source);
+  return src.length >= content.length && src.subarray(0, content.length).equals(content);
+}
+
+function isTornCopyOfSource(dir: string, sourceDir: string): boolean {
+  const topEntries = fs.readdirSync(dir).sort();
+  const allowedTop = ["SKILL.md", "references", "scripts"];
+  if (topEntries.length === 0 || !topEntries.every((entry) => allowedTop.includes(entry))) {
+    return false;
+  }
+  for (const entry of topEntries) {
+    const target = path.join(dir, entry);
+    const source = path.join(sourceDir, entry);
+    if (entry === "scripts" || entry === "references") {
+      if (!fs.statSync(target).isDirectory()) return false;
+      const childEntries = fs.readdirSync(target).sort();
+      const allowedChildren = entry === "scripts" ? ["contextforge_memory.py"] : ["design.md"];
+      if (!childEntries.every((child) => allowedChildren.includes(child))) {
+        return false;
+      }
+      for (const child of childEntries) {
+        if (!isPrefixCopy(path.join(target, child), path.join(source, child))) {
+          return false;
+        }
+      }
+    } else if (!isPrefixCopy(target, source)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function fileHash(filename: string) {
   return createHash("sha256").update(fs.readFileSync(filename)).digest("hex");
 }
@@ -254,7 +294,15 @@ export async function runSkillInstallCommand(options: SkillCommandOptions) {
         process.exitCode = 1;
         return;
       }
-      assertManagedAndUnmodified(destDir);
+      try {
+        assertManagedAndUnmodified(destDir);
+      } catch (error) {
+        // A torn install (crash mid-copy, no manifest yet) is ContextForge's
+        // own partial output, not user data: recover it under --force.
+        if (!isTornCopyOfSource(destDir, sourceDir)) throw error;
+        console.log("Recovering from a torn installation (managed files without a manifest)...");
+        fs.rmSync(destDir, { recursive: true });
+      }
     }
   }
   for (const relative of INSTALLED_FILES) {
@@ -306,6 +354,18 @@ export async function runSkillUninstallCommand(options: SkillCommandOptions) {
   }
   if (!fs.statSync(destDir).isDirectory()) {
     throw new Error("Uninstall refused: target is not a directory.");
+  }
+  if (!fs.existsSync(path.join(destDir, INSTALL_MANIFEST)) && isTornCopyOfSource(destDir, resolveSkillSourceDir())) {
+    // A torn install has no manifest; every entry is provably ContextForge's
+    // own, so clean it instead of stranding the user with manual instructions.
+    fs.rmSync(destDir, { recursive: true });
+    const parent = path.dirname(destDir);
+    const outer = path.dirname(parent);
+    for (const dirname of [parent, outer]) {
+      if (fs.existsSync(dirname) && fs.readdirSync(dirname).length === 0) fs.rmdirSync(dirname);
+    }
+    console.log("Recovered and removed a torn (partially installed) skill from " + destDir);
+    return;
   }
   assertManagedAndUnmodified(destDir);
   for (const relative of INSTALLED_FILES) fs.unlinkSync(path.join(destDir, relative));

@@ -14,8 +14,20 @@ const ScanRunPayloadSchema = z.object({
   projectId: z.string().min(1),
 });
 
+// An uploaded scan is buffered and re-serialized to repo-scan.json; cap the
+// payload so one request cannot exhaust memory on the local machine.
+const MAX_SCAN_JSON_CHARS = 2_000_000;
+
 export async function POST(request: Request) {
   try {
+    const contentLength = Number(request.headers.get("content-length") ?? 0);
+    if (contentLength > MAX_SCAN_JSON_CHARS) {
+      return NextResponse.json(
+        { error: `Request body too large (${contentLength} bytes; limit ${MAX_SCAN_JSON_CHARS}).` },
+        { status: 413 },
+      );
+    }
+
     const parsed = ScanSavePayloadSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json(
@@ -24,6 +36,14 @@ export async function POST(request: Request) {
             .map((issue) => issue.message)
             .join("; ")}`,
         },
+        { status: 400 },
+      );
+    }
+
+    const serializedLength = JSON.stringify(parsed.data.scanJson).length;
+    if (serializedLength > MAX_SCAN_JSON_CHARS) {
+      return NextResponse.json(
+        { error: `Scan JSON too large (${serializedLength} characters; limit ${MAX_SCAN_JSON_CHARS}).` },
         { status: 400 },
       );
     }
