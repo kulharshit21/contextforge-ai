@@ -258,5 +258,43 @@ class AgentMemoryTests(unittest.TestCase):
         self.assertEqual(len(stamp), 14, stamp)
         self.assertTrue(stamp.isdigit(), stamp)
 
+    def test_pid_exiting_with_259_is_not_alive(self):
+        """A writer that exits with code 259 must not keep its lock alive.
+
+        GetExitCodeProcess cannot distinguish STILL_ACTIVE from exit code
+        259; the WaitForSingleObject probe resolves it. Verified black-box:
+        a lock from an exited-259 process is auto-recovered by save.
+        """
+        if os.name != "nt":
+            self.skipTest("Windows-specific exit-code probe")
+        child = subprocess.Popen(
+            [sys.executable, "-c", "import sys; sys.exit(259)"]
+        )
+        child.wait()
+        self.assertEqual(child.returncode, 259)
+        lock_path = self.log.parent / ".writer-lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text(
+            json.dumps({"pid": child.pid, "timestamp": time.time()}),
+            encoding="utf-8",
+        )
+        result = self.invoke("save", "--kind", "fact", "--text", "Saved after 259-exit writer")
+        self.assertIn("Saved:", result.stdout)
+
+    def test_budget_uses_utf16_units_like_node(self):
+        """Emoji-heavy output is limited in UTF-16 units, matching Node .length."""
+        self.invoke("save", "--kind", "decision", "--text", "Rocket emoji parity probe")
+        emoji_task = "\U0001F680" * 300  # 300 code points = 600 UTF-16 units
+        result = self.invoke(
+            "recall", "--task", emoji_task, "--budget-chars", "552", status=2
+        )
+        self.assertIn("Task description is too long", result.stderr)
+
+    def test_note_limits_use_utf16_units_like_node(self):
+        """A note over 4000 UTF-16 units is refused even when under 4000 code points."""
+        emoji_note = "\U0001F680" * 2511  # 2511 code points = 5022 UTF-16 units
+        self.invoke("save", "--kind", "fact", "--text", emoji_note, status=2)
+
+
 if __name__ == "__main__":
     unittest.main()

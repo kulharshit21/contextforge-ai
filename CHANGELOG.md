@@ -4,6 +4,10 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Aligned the Python Skill's process-liveness and length accounting with the Node CLI (issue #53):
+  - Lock liveness now probes with `WaitForSingleObject` instead of `GetExitCodeProcess`, which cannot distinguish "still running" from "exited with code 259" — a dead writer's lock previously stayed alive for the full 60-second timeout. Win64 handles are no longer truncated by implicit `c_int` signatures.
+  - Budget and 4000-character limits count UTF-16 code units like JavaScript `.length`, so emoji-heavy notes and tasks are limited identically by both implementations.
+
 - Added explicit session handoff commands (`contextforge handoff` and `contextforge resume`) for saving verified successes, failed attempts, test results, blockers and next actions, then recovering a task-specific brief from a later session. No automatic chat scraping or hidden model calls; budgets are enforced and output-file overwrites are refused. Added safety and two-session regression tests and documentation.
 
 - Hardened the remaining dashboard API routes and removed dead secret handling (follow-up to the API boundary work):
