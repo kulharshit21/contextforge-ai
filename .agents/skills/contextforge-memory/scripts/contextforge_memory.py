@@ -48,26 +48,46 @@ def canonical(obj: dict) -> bytes:
 def digest(obj: dict) -> str:
     return hashlib.sha256(canonical(obj)).hexdigest()
 
+def utf16_len(text: str) -> int:
+    """String length in UTF-16 code units, matching JavaScript .length.
+
+    The Node CLI budgets and limits by UTF-16 units; counting Python code
+    points let emoji-heavy notes pass Python limits that Node rejects.
+    """
+    try:
+        return len(text.encode("utf-16-le", "surrogatepass")) // 2
+    except Exception:
+        return len(text)
+
+
 def is_pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
     if os.name == "nt":
         try:
             import ctypes
-            kernel32 = ctypes.windll.kernel32
-            SYNCHRONIZE = 0x00100000
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
             PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            SYNCHRONIZE = 0x00100000
+            WAIT_TIMEOUT = 0x00000102
+            # Explicit signatures: the default c_int truncates Win64 handles.
+            kernel32.OpenProcess.restype = ctypes.c_void_p
+            kernel32.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+            kernel32.WaitForSingleObject.restype = ctypes.c_uint32
+            kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+            kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
             handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, False, pid)
             if not handle:
                 return False
-            exit_code = ctypes.c_ulong()
-            if kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
-                STILL_ACTIVE = 259
-                active = (exit_code.value == STILL_ACTIVE)
+            try:
+                # A process handle is signaled when the process terminates.
+                # GetExitCodeProcess cannot distinguish "still running" from
+                # "exited with code 259", which kept dead writers' locks
+                # alive for the full timeout; WaitForSingleObject has no
+                # such ambiguity.
+                return kernel32.WaitForSingleObject(handle, 0) == WAIT_TIMEOUT
+            finally:
                 kernel32.CloseHandle(handle)
-                return active
-            kernel32.CloseHandle(handle)
-            return False
         except Exception:
             return True
     else:
@@ -170,7 +190,7 @@ def read_events(path: Path) -> list[dict]:
     return events
 
 def refuse_sensitive(text: str) -> None:
-    if len(text) > 4000:
+    if utf16_len(text) > 4000:
         raise ValueError("One memory record exceeds 4000 characters; summarize it first")
     if not text.strip():
         raise ValueError("Memory text cannot be empty")
@@ -276,10 +296,14 @@ def compact(records: list[dict], task: str, budget: int) -> str:
         "## Relevant retained records",
     ]
     output = "\n".join(header) + "\n"
+    # All budget accounting uses UTF-16 code units, matching the Node CLI's
+    # .length; counting Python code points let emoji-heavy output pass limits
+    # Node enforces (issue #53).
+    output_units = utf16_len(output)
     # The header itself (task text included) must fit the budget, matching the
     # Node CLI behavior; otherwise the recall output would silently exceed the
     # caller's strict budget.
-    if len(output) > budget:
+    if output_units > budget:
         raise ValueError("Task description is too long for the requested context budget")
     kept = 0
     for score, e in scored:
@@ -287,12 +311,15 @@ def compact(records: list[dict], task: str, budget: int) -> str:
         clean_source = " ".join(e["source"].split()) if e.get("source") else ""
         source = (" | source: " + clean_source) if clean_source else ""
         line = f"- [{e['kind']}] {note} (id: {e['id']}{source})\n"
-        if len(output) + len(line) > budget:
+        line_units = utf16_len(line)
+        if output_units + line_units > budget:
             continue
         output += line
+        output_units += line_units
         kept += 1
     footer = f"\nSelected {kept}/{len(chosen)} active records. This is extractive selection, not model-native compaction.\n"
-    if len(output) + len(footer) <= budget:
+    footer_units = utf16_len(footer)
+    if output_units + footer_units <= budget:
         output += footer
     return output
 
