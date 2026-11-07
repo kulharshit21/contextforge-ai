@@ -558,6 +558,40 @@ export async function checkpointMemory(
     breakLock: input.breakLock,
   });
 
+  // The journal marks the superseded record inactive, but the Markdown mirror
+  // is a separate human-facing artifact: without this cleanup it keeps
+  // presenting the retracted (wrong) note as current (issue #50). The mirror
+  // reflects active journal records, so the superseded item is removed.
+  if (input.supersedes) {
+    try {
+      const events = await readJournalEvents(workspaceRoot);
+      const superseded = events.find((candidate) => candidate.id === input.supersedes);
+      if (superseded) {
+        const supersededFileKey = KIND_TO_FILE_KEY[superseded.kind] || inferFileKeyFromText(superseded.text);
+        const mirrorFile = await loadMemoryFile(workspaceRoot, supersededFileKey);
+        const remaining = mirrorFile.items.filter(
+          (item) => item.content.trim() !== superseded.text.trim(),
+        );
+        if (remaining.length !== mirrorFile.items.length) {
+          await acquireWriterLock(workspaceRoot, false);
+          try {
+            await saveMemoryFile(workspaceRoot, {
+              ...mirrorFile,
+              items: remaining,
+              version: mirrorFile.version + 1,
+              updated_at: isoNow(),
+            });
+          } finally {
+            await releaseWriterLock(workspaceRoot);
+          }
+        }
+      }
+    } catch {
+      // Mirror cleanup is best-effort; the journal remains authoritative and
+      // the new checkpoint below must not fail because cleanup did.
+    }
+  }
+
   let item: MemoryItem | null = null;
   if (!input.noSync) {
     // A duplicate journal event must not create another copy in Markdown.
@@ -587,20 +621,23 @@ export async function checkpointMemory(
 export async function remember(workspaceRoot: string, text: string) {
   const result = await checkpointMemory(workspaceRoot, { text });
   if (result.item) {
-    return result.item;
+    return { item: result.item, created: result.created };
   }
   const fileKey = inferFileKeyFromText(text);
   return {
-    id: result.event.id,
-    type: fileKey.toLowerCase(),
-    title: buildItemTitle(text),
-    content: text,
-    source: "cli:remember",
-    confidence: 0.86,
-    created_at: result.event.created_at,
-    updated_at: result.event.created_at,
-    related_files: [],
-    tags: ["remember"],
+    item: {
+      id: result.event.id,
+      type: fileKey.toLowerCase(),
+      title: buildItemTitle(text),
+      content: text,
+      source: "cli:remember",
+      confidence: 0.86,
+      created_at: result.event.created_at,
+      updated_at: result.event.created_at,
+      related_files: [],
+      tags: ["remember"],
+    },
+    created: result.created,
   };
 }
 

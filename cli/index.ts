@@ -136,7 +136,7 @@ program.command("doctor").description("Detect drift between memory and repo fact
 program
   .command("export")
   .description("Generate AGENTS.md, CLAUDE.md, GEMINI.md, Cursor rules, Copilot instructions, and memory JSON")
-  .option("--all", "Export all agent instruction formats")
+  .option("--all", "[deprecated] all targets are always exported; accepted for compatibility")
   .option("--force", "Replace existing generated agent instruction files")
   .action((options: { force?: boolean }) => runExportCommand(process.cwd(), options));
 
