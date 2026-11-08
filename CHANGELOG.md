@@ -4,6 +4,8 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+
+- Added `contextforge tasks`: lists open next-records from the journal, newest first; `tasks --done <id>` supersedes the record with a completion entry, preserving history while clearing the task from the active queue.
 - Added explicit session handoff commands (`contextforge handoff` and `contextforge resume`) for saving verified successes, failed attempts, test results, blockers and next actions, then recovering a task-specific brief from a later session. No automatic chat scraping or hidden model calls; budgets are enforced and output-file overwrites are refused. Added safety and two-session regression tests and documentation.
 
 - Hardened the remaining dashboard API routes and removed dead secret handling (follow-up to the API boundary work):

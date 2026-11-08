@@ -139,6 +139,7 @@ The journal is stored under `.contextforge/agent-memory/events.jsonl`. Each entr
 | `contextforge scan` / `doctor` | Inspect repository structure and flag likely stale assumptions |
 | `contextforge capsule "task"` | Generate a saved, task-specific context capsule |
 | `contextforge export` | Export instructions for AGENTS.md, Claude, Gemini, Cursor, and Copilot |
+| `contextforge tasks` | List open next-records; mark one done with `--done <id>` |
 | `contextforge skill [status/install/uninstall]` | Manage and install the portable Agent Skill into target repositories |
 | Local dashboard | Explore seeded examples and an editable local workspace |
 
