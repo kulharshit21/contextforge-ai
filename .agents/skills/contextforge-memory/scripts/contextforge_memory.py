@@ -216,7 +216,39 @@ def lock_and_append(path: Path, kind: str, text: str, source: str, tags: list[st
                           and e.get("source") == source
                           and e.get("supersedes", "") == supersedes), None)
         if duplicate is not None:
-            return duplicate, False
+            return duplicate, False, None
+        # Near-duplicate detection (#54): warn-not-block, matching the Node
+        # CLI. Short texts (< 40 tokens) use token-set Jaccard — simhash is
+        # too coarse on few tokens; longer texts use 64-bit simhash with a
+        # Hamming distance of at most 3 bits.
+        near_duplicate_of = None
+        candidate_tokens = tokens(text)
+        if candidate_tokens:
+            candidate_fingerprint = simhash64(candidate_tokens)
+            for existing in active_events(old):
+                existing_tokens = tokens(existing["text"])
+                if not existing_tokens:
+                    continue
+                if len(candidate_tokens) >= 40 or len(existing_tokens) >= 40:
+                    duplicate_found = (
+                        hamming_distance(candidate_fingerprint, simhash64(existing_tokens)) <= 3
+                    )
+                else:
+                    candidate_set = set(candidate_tokens)
+                    existing_set = set(existing_tokens)
+                    union_size = len(candidate_set | existing_set)
+                    duplicate_found = union_size > 0 and (
+                        len(candidate_set & existing_set) / union_size >= 0.7
+                    )
+                if duplicate_found:
+                    near_duplicate_of = existing["id"]
+                    print(
+                        "Warning: near-duplicate of record "
+                        + existing["id"] + "; saving anyway. Use --supersedes "
+                        + existing["id"] + " if this replaces it.",
+                        file=sys.stderr,
+                    )
+                    break
         event = {
             "v": VERSION, "id": uuid4().hex[:12],
             "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -237,7 +269,7 @@ def lock_and_append(path: Path, kind: str, text: str, source: str, tags: list[st
                 os.fsync(handle.fileno())
         except Exception:
             raise
-        return event, True
+        return event, True, near_duplicate_of
     finally:
         marker.unlink(missing_ok=True)
 
@@ -247,6 +279,41 @@ def active_events(records: list[dict]) -> list[dict]:
 
 def terms(text: str) -> set[str]:
     return {word.lower() for word in TOKEN.findall(text) if word.lower() not in STOP}
+
+def tokens(text: str) -> list[str]:
+    return [word.lower() for word in TOKEN.findall(text) if word.lower() not in STOP]
+
+# 64-bit Simhash over token frequencies (FNV-1a 64 per token, per-bit weight
+# accumulation). Integer arithmetic only, so Node and Python compute
+# identical fingerprints for the same text (near-duplicate detection #54).
+FNV_OFFSET = 0xcbf29ce484222325
+FNV_PRIME = 0x100000001b3
+FNV_MASK = (1 << 64) - 1
+
+def _fnv1a64(token: str) -> int:
+    hash_value = FNV_OFFSET
+    for byte in token.encode("utf-8"):
+        hash_value ^= byte
+        hash_value = (hash_value * FNV_PRIME) & FNV_MASK
+    return hash_value
+
+def simhash64(tokens_list: list[str]) -> int:
+    weights = [0] * 64
+    for token in tokens_list:
+        hash_value = _fnv1a64(token)
+        for bit in range(64):
+            if (hash_value >> bit) & 1:
+                weights[bit] += 1
+            else:
+                weights[bit] -= 1
+    fingerprint = 0
+    for bit in range(64):
+        if weights[bit] > 0:
+            fingerprint |= 1 << bit
+    return fingerprint
+
+def hamming_distance(a: int, b: int) -> int:
+    return bin(a ^ b).count("1")
 
 def compact(records: list[dict], task: str, budget: int) -> str:
     if budget < 500 or budget > 100000:
@@ -429,7 +496,7 @@ def main(argv: list[str] | None = None) -> int:
             for tag in raw_tags:
                 if not VALID_TAG.fullmatch(tag):
                     raise ValueError(f"Invalid tag format: '{tag}'. Tags must be alphanumeric with underscores, dots, or hyphens.")
-            record, created = lock_and_append(directory, args.kind, note.strip(),
+            record, created, near_duplicate_of = lock_and_append(directory, args.kind, note.strip(),
                                                args.source.strip(), raw_tags, args.supersedes,
                                                break_lock=args.break_lock)
             print(("Saved" if created else "Duplicate not saved") + ": " + record["id"])

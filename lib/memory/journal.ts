@@ -1,8 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
-import { open, readFile, unlink, writeFile, rename, lstat } from "node:fs/promises";
+import { open, readFile, stat, unlink, writeFile, rename, lstat } from "node:fs/promises";
 import path from "node:path";
 
 import { ensureDir, pathExists } from "../utils/fs";
+import { tokenize } from "./text";
+import { hammingDistance, simhash64 } from "./simhash";
 import {
   type JournalEvent,
   type JournalEventKind,
@@ -165,16 +167,131 @@ export async function clearLock(workspaceRoot: string, force = false): Promise<b
   return true;
 }
 
-export async function readJournalEvents(workspaceRoot: string): Promise<JournalEvent[]> {
+// Incremental verification cache: full reads hash every line, and every
+// append re-read the whole journal — O(total bytes) of SHA-256 per write,
+// O(n^2) across a session. The cache stores the parsed events keyed by the
+// byte length and mtime they were verified at; unchanged files are served
+// without re-hashing, and appends only hash the NEW tail bytes (validated
+// against the cached chain head). `audit` always bypasses the cache so the
+// full-verification story is unchanged.
+type VerificationCacheEntry = {
+  size: number;
+  mtimeMs: number;
+  offset: number; // byte offset just past the last verified line
+  lastDigest: string; // digest of the last verified line (zeros when empty)
+  lineCount: number;
+  events: JournalEvent[];
+};
+
+const verificationCache = new Map<string, VerificationCacheEntry>();
+
+
+function parseVerifiedLine(raw: string, lineNumber: number, previous: string): JournalEvent {
+  let event: Record<string, unknown>;
+  try {
+    event = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`Invalid JSON on log line ${lineNumber}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  if (event.v !== VERSION) {
+    throw new Error(`Unsupported record version on line ${lineNumber}`);
+  }
+
+  const supplied = event.digest;
+  const payload: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(event)) {
+    if (k !== "digest") {
+      payload[k] = v;
+    }
+  }
+
+  if (event.previous !== previous || supplied !== computeDigest(payload)) {
+    throw new Error(`Log integrity mismatch on line ${lineNumber}; do not continue writing`);
+  }
+
+  const parsed = JournalEventSchema.safeParse(event);
+  if (!parsed.success) {
+    throw new Error(`Invalid event fields on line ${lineNumber}: ${parsed.error.message}`);
+  }
+
+  return parsed.data;
+}
+
+export async function readJournalEvents(
+  workspaceRoot: string,
+  options?: { fullVerify?: boolean },
+): Promise<JournalEvent[]> {
   const journalDir = getJournalDir(workspaceRoot);
   await verifyNotSymlink(journalDir, "Memory directory");
 
   const eventsPath = getEventsPath(workspaceRoot);
   if (!(await pathExists(eventsPath))) {
+    verificationCache.delete(path.resolve(eventsPath));
     return [];
   }
   await verifyNotSymlink(eventsPath, "Memory log");
 
+  const cacheKey = path.resolve(eventsPath);
+  const fileStat = await stat(eventsPath);
+  const cached = verificationCache.get(cacheKey);
+
+  if (
+    !options?.fullVerify &&
+    cached &&
+    cached.size === fileStat.size &&
+    cached.mtimeMs === fileStat.mtimeMs
+  ) {
+    return [...cached.events];
+  }
+
+  if (
+    !options?.fullVerify &&
+    cached &&
+    fileStat.size > cached.offset &&
+    fileStat.mtimeMs !== cached.mtimeMs
+  ) {
+    // Fast path: the file only GREW since the cached verification. Hash just
+    // the new tail bytes and chain them from the cached head. The tail must
+    // be newline-terminated (all writers append "\n"-terminated records); a
+    // torn final line falls back to the full read, which handles it exactly
+    // as before. Any integrity failure in the tail throws like a full read.
+    const handle = await open(eventsPath, "r");
+    let tailText = "";
+    try {
+      const tailLength = fileStat.size - cached.offset;
+      const tailBuffer = Buffer.alloc(tailLength);
+      await handle.read(tailBuffer, 0, tailLength, cached.offset);
+      tailText = tailBuffer.toString("utf8");
+    } finally {
+      await handle.close();
+    }
+
+    if (tailText.endsWith("\n")) {
+      const events = [...cached.events];
+      let previous = cached.lastDigest;
+      let lineNumber = cached.lineCount;
+      for (const raw of tailText.split(/\r?\n/)) {
+        lineNumber++;
+        if (!raw.trim()) continue;
+        const parsed = parseVerifiedLine(raw.trim(), lineNumber, previous);
+        events.push(parsed);
+        previous = parsed.digest;
+      }
+      verificationCache.set(cacheKey, {
+        size: fileStat.size,
+        mtimeMs: fileStat.mtimeMs,
+        offset: cached.offset + Buffer.byteLength(tailText, "utf8"),
+        lastDigest: previous,
+        lineCount: lineNumber,
+        events,
+      });
+      return [...events];
+    }
+    // else: fall through to the full verification path below.
+  }
+
+  // Full verification path (also the fallback for shrunk or same-mtime-changed files).
   let content = await readFile(eventsPath, "utf8");
   if (content.charCodeAt(0) === 0xfeff) {
     content = content.slice(1);
@@ -183,42 +300,26 @@ export async function readJournalEvents(workspaceRoot: string): Promise<JournalE
   const lines = content.split(/\r?\n/);
   const events: JournalEvent[] = [];
   let previous = "0".repeat(64);
+  let lineNumber = 0;
 
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i].trim();
     if (!raw) continue;
+    lineNumber++;
 
-    let event: Record<string, unknown>;
-    try {
-      event = JSON.parse(raw);
-    } catch (err) {
-      throw new Error(`Invalid JSON on log line ${i + 1}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-
-    if (event.v !== VERSION) {
-      throw new Error(`Unsupported record version on line ${i + 1}`);
-    }
-
-    const supplied = event.digest;
-    const payload: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(event)) {
-      if (k !== "digest") {
-        payload[k] = v;
-      }
-    }
-
-    if (event.previous !== previous || supplied !== computeDigest(payload)) {
-      throw new Error(`Log integrity mismatch on line ${i + 1}; do not continue writing`);
-    }
-
-    const parsed = JournalEventSchema.safeParse(event);
-    if (!parsed.success) {
-      throw new Error(`Invalid event fields on line ${i + 1}: ${parsed.error.message}`);
-    }
-
-    previous = supplied as string;
-    events.push(parsed.data);
+    const parsed = parseVerifiedLine(raw, lineNumber, previous);
+    previous = parsed.digest;
+    events.push(parsed);
   }
+
+  verificationCache.set(cacheKey, {
+    size: fileStat.size,
+    mtimeMs: fileStat.mtimeMs,
+    offset: fileStat.size,
+    lastDigest: previous,
+    lineCount: lines.length,
+    events,
+  });
 
   return events;
 }
@@ -230,6 +331,7 @@ export type JournalEventInput = {
   tags?: string[];
   supersedes?: string;
   breakLock?: boolean;
+  allowNearDuplicate?: boolean;
 };
 
 // Exclusive-create lock with stale detection, shared by journal appends,
@@ -273,7 +375,7 @@ export async function releaseWriterLock(workspaceRoot: string): Promise<void> {
 export async function appendJournalEvent(
   workspaceRoot: string,
   input: JournalEventInput,
-): Promise<{ event: JournalEvent; created: boolean }> {
+): Promise<{ event: JournalEvent; created: boolean; nearDuplicateOf?: string }> {
   refuseSensitive(input.text);
   const source = (input.source ?? "").trim();
   if (source) {
@@ -328,7 +430,41 @@ export async function appendJournalEvent(
         e.supersedes === supersedes,
     );
     if (duplicate) {
-      return { event: duplicate, created: false };
+      return { event: duplicate, created: false, nearDuplicateOf: undefined };
+    }
+
+
+    // Near-duplicate detection (#54): warn-not-block. Short texts (< 40
+    // tokens) use token-set Jaccard — simhash is too coarse on few tokens;
+    // longer texts use 64-bit simhash with Hamming distance <= 3. Mirrors
+    // the Python skill exactly.
+    let nearDuplicateOf: string | undefined;
+    if (!input.allowNearDuplicate) {
+      const candidateTokens = tokenize(cleanText);
+      if (candidateTokens.length > 0) {
+        const candidateFingerprint = simhash64(candidateTokens);
+        const candidateSet = new Set(candidateTokens);
+        const activeEvents = getActiveEvents(oldEvents);
+        for (const existing of activeEvents) {
+          const existingTokens = tokenize(existing.text);
+          if (existingTokens.length === 0) continue;
+          let duplicateFound: boolean;
+          if (candidateTokens.length >= 40 || existingTokens.length >= 40) {
+            duplicateFound =
+              hammingDistance(candidateFingerprint, simhash64(existingTokens)) <= 3;
+          } else {
+            const existingSet = new Set(existingTokens);
+            const unionSize = new Set([...candidateSet, ...existingSet]).size;
+            duplicateFound =
+              unionSize > 0 &&
+              [...candidateSet].filter((t) => existingSet.has(t)).length / unionSize >= 0.7;
+          }
+          if (duplicateFound) {
+            nearDuplicateOf = existing.id;
+            break;
+          }
+        }
+      }
     }
 
     const id = randomBytes(6).toString("hex");
@@ -351,7 +487,7 @@ export async function appendJournalEvent(
     const line = `${JSON.stringify(event)}\n`;
     await writeFile(eventsPath, line, { flag: "a", encoding: "utf8" });
 
-    return { event, created: true };
+    return { event, created: true, nearDuplicateOf };
   } finally {
     await unlink(lockPath).catch(() => {});
   }
@@ -370,7 +506,9 @@ export async function auditJournal(workspaceRoot: string): Promise<{
   lockStatus: string;
   isValid: boolean;
 }> {
-  const events = await readJournalEvents(workspaceRoot);
+  // Audit is the trust anchor: always verify the complete journal from disk,
+  // never the incremental cache.
+  const events = await readJournalEvents(workspaceRoot, { fullVerify: true });
   const active = getActiveEvents(events);
   const kinds: Record<string, number> = {};
   for (const e of events) {

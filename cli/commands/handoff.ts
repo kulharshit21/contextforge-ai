@@ -136,12 +136,15 @@ export async function runHandoffCommand(
   }
 
   for (const note of notes) {
-    await checkpointMemory(workspaceRoot, {
+    const handoffResult = await checkpointMemory(workspaceRoot, {
       text: note.text,
       kind: note.kind,
       source: options.source,
       tags: ["session-handoff"],
     });
+    if (handoffResult.nearDuplicateOf) {
+      console.error(`Warning: near-duplicate of record ${handoffResult.nearDuplicateOf}; saving anyway.`);
+    }
   }
 
   const result = await recallContext(workspaceRoot, {

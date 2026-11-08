@@ -258,5 +258,24 @@ class AgentMemoryTests(unittest.TestCase):
         self.assertEqual(len(stamp), 14, stamp)
         self.assertTrue(stamp.isdigit(), stamp)
 
+
+    def test_near_duplicate_save_warns_but_stores(self):
+        """A re-worded note matching an active record warns and still stores."""
+        self.invoke("save", "--kind", "decision", "--text",
+                    "Chose SQLite for the local cache layer")
+        result = self.invoke("save", "--kind", "decision", "--text",
+                             "Chose SQLite for the local cache layer after review")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("near-duplicate", result.stderr)
+        self.assertIn("Saved:", result.stdout)
+        self.assertIn("OK: 2 records", self.invoke("audit").stdout)
+
+    def test_unrelated_note_has_no_near_duplicate_warning(self):
+        self.invoke("save", "--kind", "decision", "--text",
+                    "Chose SQLite for the local cache layer")
+        result = self.invoke("save", "--kind", "decision", "--text",
+                             "Switched the documentation site to Starlight")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("near-duplicate", result.stderr)
 if __name__ == "__main__":
     unittest.main()

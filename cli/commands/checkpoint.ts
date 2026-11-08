@@ -40,6 +40,9 @@ export async function runCheckpointCommand(
 
   const status = result.created ? "Saved" : "Duplicate not saved";
   console.log(`${status}: [${result.event.kind}] ${result.event.id}`);
+  if (result.nearDuplicateOf) {
+    console.error(`Warning: near-duplicate of record ${result.nearDuplicateOf}; saving anyway. Use --supersedes ${result.nearDuplicateOf} if this replaces it.`);
+  }
   if (result.item) {
     console.log(`Synced to Markdown: ${result.fileKey} (${result.item.id})`);
   }
