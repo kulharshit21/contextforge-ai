@@ -248,25 +248,100 @@ def active_events(records: list[dict]) -> list[dict]:
 def terms(text: str) -> set[str]:
     return {word.lower() for word in TOKEN.findall(text) if word.lower() not in STOP}
 
+def tokens(text: str) -> list[str]:
+    return [word.lower() for word in TOKEN.findall(text) if word.lower() not in STOP]
+
+def utf16_len(text: str) -> int:
+    """String length in UTF-16 code units, matching JavaScript .length."""
+    try:
+        return len(text.encode("utf-16-le", "surrogatepass")) // 2
+    except Exception:
+        return len(text)
+
+def _parse_created_at(value) -> float | None:
+    """Epoch seconds for an ISO timestamp; None when missing or malformed."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+# Ranking v2 — deterministic, log-free BM25 with kind priority and a weekly
+# half-life recency bonus. Every operation is plain IEEE arithmetic (no log,
+# no pow beyond exact powers of two), so Node and Python produce bit-identical
+# scores and therefore identical ordering for the same journal.
+K1 = 1.2
+B = 0.75
+PRIORITY = {"blocker": 11, "next": 10, "decision": 8, "bug": 6, "handoff": 5,
+            "test": 4, "architecture": 3, "fact": 2}
+PRIORITY_KINDS = ("blocker", "next", "decision", "handoff")
+RECENCY_BONUS_MAX = 2.0
+RECENCY_HALF_LIFE_HOURS = 168  # one week
+
+def rank_records(chosen: list[dict], task: str, now_ts: float) -> list[tuple[int, dict]]:
+    """Rank active records for a task. Returns (sort_key, record) pairs,
+    highest relevance first; sort_key = floor(score * 1e6)."""
+    document_count = len(chosen)
+    query_terms = sorted(terms(task))
+
+    docs = []
+    document_frequency: dict[str, int] = {}
+    for record in chosen:
+        record_tokens = tokens(record["text"] + " " + " ".join(record.get("tags", [])))
+        term_counts: dict[str, int] = {}
+        for token in record_tokens:
+            term_counts[token] = term_counts.get(token, 0) + 1
+        for token in term_counts:
+            document_frequency[token] = document_frequency.get(token, 0) + 1
+        docs.append({
+            "record": record,
+            "tf": term_counts,
+            "unique": set(term_counts),
+            "length": utf16_len(record["text"]),
+        })
+    average_length = (sum(doc["length"] for doc in docs) / document_count) if document_count else 0.0
+    created_ts = _parse_created_at  # local alias
+
+    scored = []
+    matched_any = False
+    for doc in docs:
+        record = doc["record"]
+        priority = PRIORITY[record["kind"]]
+        overlap_terms = [term for term in query_terms if term in doc["unique"]]
+        # When a task is provided, avoid spending context on unrelated low-priority
+        # notes. Still retain global blockers, next actions, decisions, and handoffs.
+        if query_terms and not overlap_terms and record["kind"] not in PRIORITY_KINDS:
+            continue
+        if overlap_terms:
+            matched_any = True
+
+        bm25 = 0.0
+        length_norm = 1.0 - B + B * (doc["length"] / average_length) if average_length > 0 else 1.0
+        for term in overlap_terms:
+            term_frequency = doc["tf"][term]
+            document_frequency_value = document_frequency.get(term, 0)
+            idf = (document_count - document_frequency_value + 1) / (document_frequency_value + 0.5)
+            bm25 += idf * term_frequency * (K1 + 1) / (term_frequency + K1 * length_norm)
+
+        created = _parse_created_at(record.get("created_at"))
+        if created is None:
+            recency_bonus = 0.0
+        else:
+            age_hours = max(0, int((now_ts - created) // 3600))
+            recency_bonus = RECENCY_BONUS_MAX / (2 ** (age_hours // RECENCY_HALF_LIFE_HOURS))
+
+        score = bm25 + priority + recency_bonus
+        scored.append((int(score * 1_000_000), record, matched_any))
+
+    scored.sort(key=lambda pair: (-pair[0], pair[1]["id"]))
+    return scored, matched_any
+
 def compact(records: list[dict], task: str, budget: int) -> str:
     if budget < 500 or budget > 100000:
         raise ValueError("Character budget must be between 500 and 100000")
     chosen = active_events(records)
-    needles = terms(task)
-    scored = []
-    for position, e in enumerate(chosen):
-        words = terms(e["text"] + " " + " ".join(e.get("tags", [])))
-        overlap = len(words & needles)
-        # When a task is provided, avoid spending context on unrelated low-priority notes.
-        # Still retain global blockers, next actions, decisions, and handoffs.
-        if needles and overlap == 0 and e["kind"] not in ("blocker", "next", "decision", "handoff"):
-            continue
-        priority = {"blocker": 11, "next": 10, "decision": 8, "bug": 6, "handoff": 5,
-                    "test": 4, "architecture": 3, "fact": 2}[e["kind"]]
-        recency = (position + 1) / max(1, len(chosen))
-        score = overlap * 16 + priority + recency * 4
-        scored.append((score, e))
-    scored.sort(key=lambda pair: (-pair[0], pair[1]["id"]))
+    scored, matched_any = rank_records(chosen, task, time.time())
     header = [
         "# ContextForge task handoff",
         f"Task: {task.strip() or '(general recovery)'}",
@@ -275,6 +350,10 @@ def compact(records: list[dict], task: str, budget: int) -> str:
         "",
         "## Relevant retained records",
     ]
+    # Abstention: when nothing matched the task keywords, say so instead of
+    # letting routine priority records masquerade as relevant context.
+    if task.strip() and chosen and not matched_any:
+        header.insert(4, "No memory records matched the task keywords; the entries below are the most recent priority records, not task-specific context.")
     output = "\n".join(header) + "\n"
     # The header itself (task text included) must fit the budget, matching the
     # Node CLI behavior; otherwise the recall output would silently exceed the
@@ -282,7 +361,7 @@ def compact(records: list[dict], task: str, budget: int) -> str:
     if len(output) > budget:
         raise ValueError("Task description is too long for the requested context budget")
     kept = 0
-    for score, e in scored:
+    for score, e, matched in scored:
         note = " ".join(e["text"].split())
         clean_source = " ".join(e["source"].split()) if e.get("source") else ""
         source = (" | source: " + clean_source) if clean_source else ""

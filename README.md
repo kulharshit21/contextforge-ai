@@ -18,7 +18,7 @@ ContextForge is an **early-stage, MIT-licensed project** with two entry points: 
 Coding sessions often lose the reasoning behind a change: why a library was chosen, which fix failed, what was verified, or which blocker remains. ContextForge keeps those notes in your project workspace so they can be recovered after a new session or a long conversation.
 
 - **Checkpoint:** Save decisions, bugs, tests, blockers, and next steps, optionally linked to evidence.
-- **Recall:** Select relevant entries with an explicit character budget (`handoff`, `capsule`, or `evidence`).
+- **Recall:** Select relevant entries with an explicit character budget (`handoff`, `capsule`, or `evidence`), ranked by IDF-weighted term relevance with document-length normalization and time decay.
 - **Audit:** Verify an append-only journal and inspect project memory.
 - **Stay local:** No model API or account is needed for the default workflow.
 

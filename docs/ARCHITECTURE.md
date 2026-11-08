@@ -30,7 +30,7 @@ There are two related but **not automatically identical** representations:
 | `contextforge checkpoint`, `remember` | Appends a validated event | Appends an item by default; `--no-sync` skips it |
 | Python skill `save` | Appends a journal event | **Does not automatically update** Markdown |
 | `contextforge sync` | Imports eligible Markdown items not already found in the journal | Reads Markdown; does not rebuild it |
-| `contextforge recall` | Reads journal for task-relevant records | Does not rewrite Markdown |
+| `contextforge recall` | Reads journal for task-relevant records, ranked by a deterministic log-free BM25 (IDF, tf saturation, document-length normalization) plus kind priority and a weekly-half-life recency bonus; the same scoring runs bit-identically in the Node CLI and the Python Skill | Does not rewrite Markdown |
 | `contextforge audit` | Validates journal integrity | Summarizes Markdown |
 | `contextforge repair` | Attempts crash/corruption recovery and creates a backup | Does not guarantee a full restore of Markdown |
 
