@@ -4,6 +4,12 @@ This project follows the general structure of Keep a Changelog. Versions below a
 
 ## Unreleased
 
+- Recall ranking v2 — more accurate, still deterministic and offline (both the CLI and the Python Skill, bit-identical ordering):
+  - Replaced raw keyword-overlap counting with a log-free BM25 variant: IDF-weighted term matching with tf saturation and document-length normalization, so a short on-topic note now outranks a long note that merely mentions a term once.
+  - Replaced positional "recency" (which treated a 3-day-old and a 3-month-old journal identically) with calendar-time decay: a weekly half-life bonus computed from record timestamps.
+  - Abstention: when nothing matches the task keywords, recall says so explicitly instead of letting routine priority records masquerade as relevant context.
+  - Internal benchmark: recall 83.3% -> 88.0% (+/- 4.6), negative cases 2/30 -> 1/30, latency unchanged (~70 ms).
+
 - Added explicit session handoff commands (`contextforge handoff` and `contextforge resume`) for saving verified successes, failed attempts, test results, blockers and next actions, then recovering a task-specific brief from a later session. No automatic chat scraping or hidden model calls; budgets are enforced and output-file overwrites are refused. Added safety and two-session regression tests and documentation.
 
 - Hardened the remaining dashboard API routes and removed dead secret handling (follow-up to the API boundary work):

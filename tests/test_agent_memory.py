@@ -258,5 +258,26 @@ class AgentMemoryTests(unittest.TestCase):
         self.assertEqual(len(stamp), 14, stamp)
         self.assertTrue(stamp.isdigit(), stamp)
 
+    def test_ranking_prefers_on_topic_over_long_noisy_note(self):
+        """Length normalization + tf saturation: the on-topic record wins."""
+        self.invoke("save", "--kind", "fact",
+                    "--text", "auth " + "filler " * 400)
+        self.invoke("save", "--kind", "decision",
+                    "--text", "auth middleware uses rotating refresh tokens")
+        response = self.invoke("recall", "--task", "auth middleware tokens")
+        decision_at = response.stdout.find("rotating refresh tokens")
+        noisy_at = response.stdout.find("auth filler")
+        self.assertGreaterEqual(decision_at, 0)
+        self.assertLess(decision_at, noisy_at if noisy_at >= 0 else len(response.stdout),
+                        "on-topic record must rank before the long noisy one")
+
+    def test_recall_abstention_line_when_nothing_matches(self):
+        self.invoke("save", "--kind", "blocker",
+                    "--text", "Deploy blocked on credentials")
+        response = self.invoke("recall", "--task", "kubernetes ingress")
+        self.assertIn("No memory records matched the task keywords", response.stdout)
+        self.assertIn("Deploy blocked on credentials", response.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
