@@ -524,7 +524,7 @@ export type CheckpointInput = {
 export async function checkpointMemory(
   workspaceRoot: string,
   input: CheckpointInput,
-): Promise<{ event: JournalEvent; item: MemoryItem | null; fileKey: MemoryFileKey; created: boolean }> {
+): Promise<{ event: JournalEvent; item: MemoryItem | null; fileKey: MemoryFileKey; created: boolean; nearDuplicateOf?: string }> {
   await initWorkspace(workspaceRoot);
   let fileKey: MemoryFileKey;
   let kind: JournalEventKind;
@@ -549,7 +549,7 @@ export async function checkpointMemory(
     }
   }
 
-  const { event, created } = await appendJournalEvent(workspaceRoot, {
+  const { event, created, nearDuplicateOf } = await appendJournalEvent(workspaceRoot, {
     kind,
     text: input.text,
     source,
@@ -581,26 +581,30 @@ export async function checkpointMemory(
     }
   }
 
-  return { event, item, fileKey, created };
+  return { event, item, fileKey, created, nearDuplicateOf };
 }
 
 export async function remember(workspaceRoot: string, text: string) {
   const result = await checkpointMemory(workspaceRoot, { text });
   if (result.item) {
-    return result.item;
+    return { item: result.item, created: result.created, nearDuplicateOf: result.nearDuplicateOf };
   }
   const fileKey = inferFileKeyFromText(text);
   return {
-    id: result.event.id,
-    type: fileKey.toLowerCase(),
-    title: buildItemTitle(text),
-    content: text,
-    source: "cli:remember",
-    confidence: 0.86,
-    created_at: result.event.created_at,
-    updated_at: result.event.created_at,
-    related_files: [],
-    tags: ["remember"],
+    nearDuplicateOf: result.nearDuplicateOf,
+    item: {
+      id: result.event.id,
+      type: fileKey.toLowerCase(),
+      title: buildItemTitle(text),
+      content: text,
+      source: "cli:remember",
+      confidence: 0.86,
+      created_at: result.event.created_at,
+      updated_at: result.event.created_at,
+      related_files: [],
+      tags: ["remember"],
+    },
+    created: result.created,
   };
 }
 
