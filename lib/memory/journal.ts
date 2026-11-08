@@ -230,6 +230,10 @@ export type JournalEventInput = {
   tags?: string[];
   supersedes?: string;
   breakLock?: boolean;
+  // Machine pipelines (ingest-chat, sync, tasks --done) set this to skip the
+  // near-duplicate warning: they de-duplicate by exact text and their
+  // appends intentionally mirror or extend existing records.
+  allowNearDuplicate?: boolean;
 };
 
 // Exclusive-create lock with stale detection, shared by journal appends,

@@ -8,6 +8,7 @@ import { runCheckpointCommand, type CheckpointCommandOptions } from "./commands/
 import { runDoctorCommand } from "./commands/doctor";
 import { runExportCommand } from "./commands/export";
 import { runHandoffCommand, runResumeCommand, type HandoffCommandOptions, type ResumeCommandOptions } from "./commands/handoff";
+import { runTasksCommand, type TasksCommandOptions } from "./commands/tasks";
 import { runIngestChatCommand } from "./commands/ingest-chat";
 import { runInitCommand } from "./commands/init";
 import { runRecallCommand, type RecallCommandOptions } from "./commands/recall";
@@ -132,6 +133,14 @@ program
 program.command("doctor").description("Detect drift between memory and repo facts").action(() => {
   return runDoctorCommand();
 });
+
+program
+  .command("tasks")
+  .description("List open next-records; mark one done with --done <id>")
+  .option("--done <id>", "mark the next-record with this 12-character id as done")
+  .action((options: TasksCommandOptions) => {
+    return runTasksCommand(options);
+  });
 
 program
   .command("export")
